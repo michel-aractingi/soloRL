@@ -1,0 +1,6 @@
+episode_length: 400
+frame_skip: 4
+mode: headless
+model_urdf: /home/maractin/Workspace/soloRL/solo_description/robots/solo.urdf
+control: pd
+gains: [5., .2]
