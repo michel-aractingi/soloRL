@@ -37,3 +37,14 @@ Train TD3 agent
 ```
 $ python -u ./training/train_td3.py --num-agents 64  --logdir $LOGDIR/ --log-interval 1000 --save-interval 2000 --config-file ./configs/basic.yaml --seed 1
 ```
+
+`$LOGDIR` variable contains the directory in which checkpoints of the trained models and tensorboard visulizations are stored
+
+### Testing ### 
+Run trained models
+```
+# test ppo agents
+$ python ./testing/test_ppo.py --checkpoint-dir $LOGDIR --mode gui --config-file ./configs/basic.yaml
+# test td3 agents
+$ python ./testing/test_td3.py --checkpoint-dir $LOGDIR --mode gui --config-file ./configs/basic.yaml
+```
