@@ -48,3 +48,14 @@ $ python ./testing/test_ppo.py --checkpoint-dir $LOGDIR --mode gui --config-file
 # test td3 agents
 $ python ./testing/test_td3.py --checkpoint-dir $LOGDIR --mode gui --config-file ./configs/basic.yaml
 ```
+
+### Examples
+PPO agents:
+| stand | walk | pointGoal |
+|-------|------|-----------|
+|![misc/gifs/stand_ppo.gif] | | |
+
+TD3 agents:
+| stand | walk | pointGoal |
+|-------|------|-----------|
+| | | |
