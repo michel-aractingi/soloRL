@@ -1,5 +1,5 @@
 # soloRL
-Reinforcement Learning agents and gym-style environment for the Solo legged robot.
+Reinforcement Learning agents and gym-style environment for the [Solo](https://open-dynamic-robot-initiative.github.io/) legged robot.
 
 ### Requirements:
 - Numpy 
