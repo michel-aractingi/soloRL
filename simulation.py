@@ -4,11 +4,11 @@ import pybullet_data as pd
 
 class SimulatedScene:
     loaded = False
-    def __init__(self, flat_ground, use_treadmill=False, dt=None, nogravity=False):
+    def __init__(self, flat_ground, use_treadmill=False, scene_timestep=None, nogravity=False):
         self.flat_ground = flat_ground
         self.use_treadmill = use_treadmill if flat_ground else False
         self.nogravity = nogravity
-        self.dt = 1/240.0 if dt is None else dt
+        self.scene_timestep = scene_timestep 
     
     def load(self):
         if self.loaded:
@@ -30,7 +30,7 @@ class SimulatedScene:
             self.ground_id = self.ground_heightfield.terrain_id
 
         # set timestep (LAAS default 0.001)
-        p.setTimeStep(self.dt)
+        p.setTimeStep(self.scene_timestep)
 
         self.loaded = True
 

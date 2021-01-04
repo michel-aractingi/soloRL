@@ -19,6 +19,7 @@ class SoloBase:
                  frame_skip=1, 
                  control='torque', 
                  task='',
+                 scene_timestep=1./240.,
                  flat_ground=True,
                  use_treadmill=False,
                  gains=None,
@@ -46,6 +47,7 @@ class SoloBase:
         
         self.state_history = deque(maxlen=self.num_history_stack)
         
+        self.scene_timestep = scene_timestep
         self.task = task
         self.initial_z = .35
         self.max_joint_torque = 3
@@ -81,7 +83,8 @@ class SoloBase:
             self.phys_id = p.connect(p.DIRECT)
     
         self.scene = SimulatedScene(self.flat_ground, 
-                                    use_treadmill=self.use_treadmill)
+                                    use_treadmill=self.use_treadmill
+                                    scene_timestep=self.scene_timestep)
         self.scene.load()
         self.ground_id = self.scene.ground_id
 

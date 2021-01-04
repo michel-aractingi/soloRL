@@ -1,5 +1,6 @@
-from solo import SoloBase
-from baseEnv import SoloBaseEnv
+#from solo import SoloBase
+#from baseEnv import SoloBaseEnv
+from soloGaitEnv import SoloGaitEnv
 import argparse
 
 if __name__ == '__main__':
@@ -19,5 +20,5 @@ if __name__ == '__main__':
     else:
         config = vars(args)
 
-    env = SoloBaseEnv(config)
+    env = SoloGaitEnv(config)
     import pudb; pudb.set_trace()
