@@ -91,7 +91,6 @@ class SoloGaitEnv(gym.core.Env):
 
         done, info = self.get_termination()
         while self.discrete_time % (self.rl_dt/self.dt)!=0 and not done:
-            print(self.continuous_time % self.rl_dt)
             self.controller_step()
             self.continuous_time += self.dt
             self.discrete_time += 1
@@ -103,17 +102,36 @@ class SoloGaitEnv(gym.core.Env):
         return state, reward, done, {}#self._info
 
     def reset(self):
+        #self.controller.reset()
+        self.controller = \
+            Controller(q_init=self.q_init, 
+                       envID=0,
+                       velID=1,
+                       dt_tsid=self.dt_wbc,
+                       dt_mpc=self.dt_mpc, 
+                       k_mpc=self.k_mpc,
+                       t=0,
+                       T_gait=self.T_gait,
+                       T_mpc=self.T_mpc,
+                       N_SIMULATION=50000,
+                       type_MPC=True,
+                       pyb_feedback=True, 
+                       on_solo8= not self.solo12,
+                       use_flat_plane= self.use_flat_ground,
+                       predefined_vel=True,
+                       enable_pyb_GUI=self.mode=='gui')
         self.robot.reset()
         self._reset = False
         self.timestep = 0
         self.continuous_time = 0
+        self.discrete_time = 0
         self._reward_sum = 0
         self._goals_reached = 0
-        for k in self._rewards_info.keys():
-            self._rewards_info[k] = 0.0
+        #for k in self._rewards_info.keys():
+            #self._rewards_info[k] = 0.0
 
-        for _ in range(np.random.randint(low=5,high=12)): #prev 20
-            self.simulator_step()
+        #for _ in range(np.random.randint(low=5,high=12)): #prev 20
+            #self.simulator_step()
         
         return self.get_observation()
 
@@ -122,8 +140,7 @@ class SoloGaitEnv(gym.core.Env):
         self.controller.v_ref = vel.reshape(-1,1)
 
     def close(self):
-        #self.robot.disconnect()
-        p.disconnect()
+        self.robot.Stop()
         super().close()
 
     def get_reward(self, state=None, action=None):
@@ -180,7 +197,7 @@ class SoloGaitEnv(gym.core.Env):
     def get_termination(self):
         info = {}
         # if fallen
-        if self.robot.baseState[0][-1] < 0.05:
+        if self.robot.baseState[0][-1] < 0.11:
             info['timeout'] = False
             return True, info
 
