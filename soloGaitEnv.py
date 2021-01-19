@@ -3,10 +3,8 @@ import gym
 import numpy as np
 import pybullet as p
 
-os.chdir('/home/quadruped-reactive-walking-feature-merge-mpc-tsid/scripts/')
-from Controller import Controller
-from PyBulletSimulator import PyBulletSimulator
-
+#os.chdir('/home/quadruped-reactive-walking-feature-merge-mpc-tsid/scripts/')
+from scripts import Controller, PyBulletSimulator
 
 feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
@@ -31,12 +29,14 @@ class SoloGaitEnv(gym.core.Env):
         self.episode_length = config.get('episode_length', 50)
         self.use_flat_ground = config.get('flat_ground', True)
 
+        self.velID = 1
+
         self.rl_dt = 0.4
 
         self.controller = \
             Controller(q_init=self.q_init, 
                        envID=0,
-                       velID=1,
+                       velID=self.velID,
                        dt_tsid=self.dt_wbc,
                        dt_mpc=self.dt_mpc, 
                        k_mpc=self.k_mpc,
@@ -86,7 +86,7 @@ class SoloGaitEnv(gym.core.Env):
         self.continuous_time += self.dt
         self.discrete_time += 1
         self.timestep += 1
-        self.set_new_gait(action)
+        self.set_new_gait(np.int(action))
         self.robot.UpdateMeasurment()
 
         done, info = self.get_termination()
@@ -106,7 +106,7 @@ class SoloGaitEnv(gym.core.Env):
         self.controller = \
             Controller(q_init=self.q_init, 
                        envID=0,
-                       velID=1,
+                       velID=self.velID,
                        dt_tsid=self.dt_wbc,
                        dt_mpc=self.dt_mpc, 
                        k_mpc=self.k_mpc,

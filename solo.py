@@ -83,7 +83,7 @@ class SoloBase:
             self.phys_id = p.connect(p.DIRECT)
     
         self.scene = SimulatedScene(self.flat_ground, 
-                                    use_treadmill=self.use_treadmill
+                                    use_treadmill=self.use_treadmill,
                                     scene_timestep=self.scene_timestep)
         self.scene.load()
         self.ground_id = self.scene.ground_id

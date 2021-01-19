@@ -37,6 +37,8 @@ class SoloBaseEnv(gym.core.Env):
                               'dr/roll_pitch_balance_rew': 0,
                               'dr/progress_rew': 0}
 
+        np.random.seed(np.random.randint(1e9))
+
     def step(self, action):
         assert not self._reset, "env.reset() must be called before step"
         

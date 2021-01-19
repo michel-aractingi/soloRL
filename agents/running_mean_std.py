@@ -1,5 +1,6 @@
 import numpy as np
-from PyTorchAgents.envs import VecEnvWrapper
+#from PyTorchAgents.envs import VecEnvWrapper
+from abc import ABC, abstractmethod
 
 
 ##################
@@ -36,6 +37,38 @@ def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, 
     new_count = tot_count
 
     return new_mean, new_var, new_count
+
+class VecEnvWrapper(ABC):
+    """
+    An environment wrapper that applies to an entire batch
+    of environments at once.
+    """
+
+    def __init__(self, venv):
+        self.venv = venv
+        self.nenvs = venv.nenvs
+
+    def step_(self, actions):
+        try:
+            return self.venv.step(actions)
+        except AttributeError:
+            self.step_async(actions)
+            return self.step_wait()
+
+    @abstractmethod
+    def reset(self):
+        pass
+
+    def close(self):
+        return self.venv.close()
+
+    def render(self, mode='human'):
+        return self.venv.render(mode=mode)
+
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError("attempted to get missing private attribute '{}'".format(name))
+        return getattr(self.venv, name)
 
 class VecNormalize(VecEnvWrapper):
     """
