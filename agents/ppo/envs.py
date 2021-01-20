@@ -3,6 +3,14 @@ import torch
 import numpy as np
 from gym.core import Env
 
+
+class NDProcess(Process):
+    def _get_daemon(self):
+        return False
+    def _set_daemon(self, value):
+        pass
+    daemon = property(_get_daemon, _set_daemon)
+
 def make_vec_envs(config, num_envs, env_constructor, gamma=0.99, device=torch.device('cpu:0'), training=True):
     """construct env
     """
@@ -61,7 +69,7 @@ class VecEnvWrapper(Env):
             r, p = Pipe()
             self.remotes.append(r)
             self.work_remotes.append(p)
-            self.ps.append(Process(target=simple_worker, args=(p, envs_fn[n])))
+            self.ps.append(NDProcess(target=simple_worker, args=(p, envs_fn[n])))
             self.ps[-1].daemon = True
             self.ps[-1].start()
             #self.work_remotes[-1].close()
