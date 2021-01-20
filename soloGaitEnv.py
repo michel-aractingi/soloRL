@@ -8,6 +8,15 @@ from scripts import Controller, PyBulletSimulator
 
 feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
+Vmax = 0.7
+
+def new_random_vel():
+    mask = np.array([[1,1,0,0,0,1]])
+    vel = (np.random.random((6,1)) - 0.5 ) * 2 * Vmax
+    vel *= mask.T
+    return vel
+
+
 class SoloGaitEnv(gym.core.Env):
     def __init__(self, config):
         
@@ -26,8 +35,10 @@ class SoloGaitEnv(gym.core.Env):
         self.T_mpc  = config.get('T_mpc', 0.32)
 
         self.solo12 = config.get('solo12', True)
-        self.episode_length = config.get('episode_length', 50)
+        self.episode_length = config.get('episode_length', 100)
+        self.vel_switch = config.get('vel_switch', 30)
         self.use_flat_ground = config.get('flat_ground', True)
+        self.auto_vel_switch = config.get('auto_vel_switch', True)
 
         self.velID = 1
 
@@ -79,6 +90,9 @@ class SoloGaitEnv(gym.core.Env):
         self.timestep = 0
         self._reward_sum = 0
         self._rewards_info = {}
+        self._info = {}
+        self._info['episode_length'] = 0
+        self._info['episode_reward'] = 0
 
     def step(self, action):
         assert not self._reset, "env.reset() must be called before step"
@@ -99,7 +113,18 @@ class SoloGaitEnv(gym.core.Env):
         state = self.get_observation()
         reward = self.get_reward()
 
-        return state, reward, done, {}#self._info
+
+        self._info['episode_length'] += 1
+        self._info['episode_reward'] += reward
+        self._info = {**self._info, **info}
+        self._info['success'] = not info['timeout'] and done
+
+        # Change velocity command every N steps
+        if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
+            self.reset_vel_ref(new_random_vel())
+
+
+        return state, reward, done, self._info
 
     def reset(self):
         #self.controller.reset()
@@ -121,6 +146,8 @@ class SoloGaitEnv(gym.core.Env):
                        predefined_vel=True,
                        enable_pyb_GUI=self.mode=='gui')
         self.robot.reset()
+        if self.auto_vel_switch: self.reset_vel_ref(new_random_vel())
+
         self._reset = False
         self.timestep = 0
         self.continuous_time = 0
@@ -149,9 +176,10 @@ class SoloGaitEnv(gym.core.Env):
         torque_pen = 0.5 * np.square(self.robot.tau_ff).sum()
 
         base_vel = np.array(self.robot.baseVel).flatten()
-        vel_pen = 0.5 * np.square(self.vel_ref - base_vel).sum()
+        vel_pen = 0.5 * np.square(self.vel_ref.flatten() - base_vel).sum()
 
-        reward = 1  - 0.01 * torque_pen  - 0.5 * vel_pen
+        reward = - 0.001 * torque_pen  - 0.5 * vel_pen
+        reward = reward.clip(-10.,0.)
 
         return reward
 
@@ -191,14 +219,13 @@ class SoloGaitEnv(gym.core.Env):
 
         history = ...
 
-        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, executed_gait, self.vel_ref])
+        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, executed_gait, self.vel_ref.flatten()])
 
 
     def get_termination(self):
-        info = {}
+        info = {'timeout':False}
         # if fallen
         if self.robot.baseState[0][-1] < 0.11:
-            info['timeout'] = False
             return True, info
 
         if self.timestep >= self.episode_length:
