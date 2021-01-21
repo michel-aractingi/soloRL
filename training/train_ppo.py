@@ -4,7 +4,6 @@ import torch
 import argparse
 from datetime import datetime 
 from soloRL.agents import ppo
-from soloRL.baseEnv import SoloBaseEnv
 from torch.utils.tensorboard import SummaryWriter
 
 def get_ppo_args():
@@ -13,6 +12,8 @@ def get_ppo_args():
     parser.add_argument('--output-size', type=int, default=64)
     parser.add_argument('--hidden-size', type=int, default=32)
     parser.add_argument('--no-cuda', action='store_true', default=False)
+
+    parser.add_argument('--env-name', choices=['base', 'gait'], default='base')
 
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--tau', type=float, default=0.95)
@@ -65,4 +66,11 @@ if __name__=='__main__':
     else: 
         writer = None
 
-    ppo.train(args, config, SoloBaseEnv, writer)
+    if args.env_name == 'base':
+        from soloRL.baseEnv import SoloBaseEnv
+        env_constructor = SoloBaseEnv
+    elif args.env_name == 'gait':
+        from soloRL.soloGaitEnv import SoloGaitEnv
+        env_constructor = SoloGaitEnv
+
+    ppo.train(args, config, env_constructor, writer)
