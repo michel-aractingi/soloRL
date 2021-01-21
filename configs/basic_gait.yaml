@@ -1,0 +1,7 @@
+episode_length: 50
+vel_switch: 20
+mode: headless
+num_history_stack: 1
+flat_ground: True
+auto_vel_switch: True
+solo12: True

@@ -50,7 +50,9 @@ if __name__=='__main__':
     args = get_ppo_args()
     args.cuda = torch.cuda.is_available() and not args.no_cuda
     config = parse_config(args.config_file)
-    if args.task is not None:
+    if args.env_name == 'gait':
+        config['task'] = ''
+    elif args.task is not None:
         config['task'] = args.task
     
     args.episode_length = config['episode_length']

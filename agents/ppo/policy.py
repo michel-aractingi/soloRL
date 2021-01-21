@@ -27,7 +27,7 @@ class Policy(nn.Module):
             action = dist.mean
         else:
             action = dist.sample()
-
+            
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
@@ -41,7 +41,7 @@ class Policy(nn.Module):
         value, actor_features = self.base(inputs)
         dist = self.pi_dist(actor_features)
 
-        action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
+        action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy

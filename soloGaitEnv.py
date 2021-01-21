@@ -99,7 +99,6 @@ class SoloGaitEnv(gym.core.Env):
         self.continuous_time += self.dt
         self.discrete_time += 1
         self.timestep += 1
-        print(action)
         self.set_new_gait(np.int(action))
         self.robot.UpdateMeasurment()
 
@@ -113,16 +112,17 @@ class SoloGaitEnv(gym.core.Env):
         state = self.get_observation()
         reward = self.get_reward()
 
-
         self._info['episode_length'] += 1
         self._info['episode_reward'] += reward
         self._info = {**self._info, **info}
         self._info['success'] = not info['timeout'] and done
 
+        if done and not info['timeout']:
+            reward = -10.
+
         # Change velocity command every N steps
         if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
             self.reset_vel_ref(new_random_vel())
-
 
         return state, reward, done, self._info
 
