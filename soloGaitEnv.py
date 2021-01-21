@@ -75,8 +75,7 @@ class SoloGaitEnv(gym.core.Env):
         self.feet_ids = [self.robot_model.getFrameId(n) for n in feet_frames_name]
 
         self.num_gaits = 6
-        self.reset_vel_ref(np.array([0.5,0,0,0,0,0]))#vel_ref)
-        self.action_space = gym.spaces.Discrete(self.num_gaits)
+        self.action_space = gym.spaces.Discrete(self.num_gaits + 1)
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
         # 4 rel foot pose, 6 vel_ref, 10 gait seq = 62
@@ -100,6 +99,7 @@ class SoloGaitEnv(gym.core.Env):
         self.continuous_time += self.dt
         self.discrete_time += 1
         self.timestep += 1
+        print(action)
         self.set_new_gait(np.int(action))
         self.robot.UpdateMeasurment()
 

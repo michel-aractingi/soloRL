@@ -1,6 +1,6 @@
 episode_length: 400
 frame_skip: 4
-mode: gui
+mode: headless
 model_urdf: /home/maractin/Workspace/soloRL/solo_description/robots/solo12.urdf
 control: torque
 gains: null

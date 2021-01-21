@@ -31,6 +31,11 @@ def train(args, config, env_constructor, writer=None):
 
     envs = make_vec_envs(config, args.num_agents, env_constructor, args.gamma, device)
 
+    if envs.action_space.__class__.__name__ == 'Box':
+        action_dim = envs.action_space.shape[0]
+    else:
+        action_dim = envs.action_space.n
+
     actor_critic = Policy(envs.observation_space.shape, envs.action_space)
     actor_critic.to(device)
 
@@ -45,7 +50,7 @@ def train(args, config, env_constructor, writer=None):
                  max_grad_norm=args.max_grad_norm)
 
     ep_buffer = OPBuffer(args.num_steps, args.num_agents,
-                              envs.observation_space.shape, envs.action_space.shape[0], device)
+                              envs.observation_space.shape, action_dim, device)
 
     obs = envs.reset()
     ep_buffer.obs[0].copy_(obs)
