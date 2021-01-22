@@ -127,7 +127,8 @@ class SoloGaitEnv(gym.core.Env):
         return state, reward, done, self._info
 
     def reset(self):
-        #self.controller.reset()
+        self.controller.reset()
+        """
         self.controller = \
             Controller(q_init=self.q_init, 
                        envID=0,
@@ -145,6 +146,7 @@ class SoloGaitEnv(gym.core.Env):
                        use_flat_plane= self.use_flat_ground,
                        predefined_vel=True,
                        enable_pyb_GUI=self.mode=='gui')
+        """
         self.robot.reset()
         if self.auto_vel_switch: self.reset_vel_ref(new_random_vel())
 
