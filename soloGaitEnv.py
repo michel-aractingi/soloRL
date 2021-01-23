@@ -42,7 +42,7 @@ class SoloGaitEnv(gym.core.Env):
 
         self.velID = 1
 
-        self.rl_dt = 0.4
+        self.rl_dt = 1
 
         self.controller = \
             Controller(q_init=self.q_init, 
@@ -75,7 +75,7 @@ class SoloGaitEnv(gym.core.Env):
         self.feet_ids = [self.robot_model.getFrameId(n) for n in feet_frames_name]
 
         self.num_gaits = 6
-        self.action_space = gym.spaces.Discrete(self.num_gaits + 1)
+        self.action_space = gym.spaces.Discrete(self.num_gaits) # No noop action
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
         # 4 rel foot pose, 6 vel_ref, 10 gait seq = 62
@@ -115,7 +115,7 @@ class SoloGaitEnv(gym.core.Env):
         self._info['episode_length'] += 1
         self._info['episode_reward'] += reward
         self._info = {**self._info, **info}
-        self._info['success'] = not info['timeout'] and done
+        self._info['success'] = info['timeout'] and done
 
         if done and not info['timeout']:
             reward = -10.
@@ -156,6 +156,8 @@ class SoloGaitEnv(gym.core.Env):
         self.discrete_time = 0
         self._reward_sum = 0
         self._goals_reached = 0
+        self._info['episode_length'] = 0
+        self._info['episode_reward'] = 0
         #for k in self._rewards_info.keys():
             #self._rewards_info[k] = 0.0
 
@@ -202,8 +204,10 @@ class SoloGaitEnv(gym.core.Env):
         self.robot.SendCommand(WaitEndOfCycle=False)
 
     def set_new_gait(self, gait_num):
-        self.controller.planner.cg = gait_num
-        self.controller.planner.gait_change = True
+        # + 1 because 0 corresponds to Noop
+        if self.controller.planner.cg != gait_num + 1:
+            self.controller.planner.gait_change = True
+            self.controller.planner.cg = gait_num + 1
 
     def get_observation(self):
 
