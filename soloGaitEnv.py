@@ -42,7 +42,7 @@ class SoloGaitEnv(gym.core.Env):
 
         self.velID = 1
 
-        self.rl_dt = 1
+        self.rl_dt = .4
 
         self.controller = \
             Controller(q_init=self.q_init, 
