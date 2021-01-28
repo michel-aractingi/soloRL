@@ -1,5 +1,6 @@
 import os
 import gym
+import random
 import numpy as np
 import pybullet as p
 
@@ -112,19 +113,19 @@ class SoloGaitEnv(gym.core.Env):
         state = self.get_observation()
         reward = self.get_reward()
 
+        if done and not info['timeout']:
+            reward = -10.
+
         self._info['episode_length'] += 1
         self._info['episode_reward'] += reward
         self._info = {**self._info, **info}
         self._info['success'] = info['timeout'] and done
 
-        if done and not info['timeout']:
-            reward = -10.
-
         # Change velocity command every N steps
         if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
             self.reset_vel_ref(new_random_vel())
 
-        return state, reward, done, self._info
+        return state, reward, done, self._info.copy()
 
     def reset(self):
         self.controller.reset()
@@ -179,7 +180,7 @@ class SoloGaitEnv(gym.core.Env):
 
         torque_pen = 0.5 * np.square(self.robot.tau_ff).sum()
 
-        base_vel = np.array(self.robot.baseVel).flatten()
+        base_vel = self.get_base_vel().flatten()
         vel_pen = 0.5 * np.square(self.vel_ref.flatten() - base_vel).sum()
 
         reward = - 0.001 * torque_pen  - 0.5 * vel_pen
@@ -215,7 +216,7 @@ class SoloGaitEnv(gym.core.Env):
         qu = np.array([self.robot.baseState[0],
             p.getEulerFromQuaternion(self.robot.baseOrientation)]).flatten()[2:]
 
-        qu_dot = np.array(self.robot.baseVel).flatten()
+        qu_dot = np.array(self.get_base_vel()).flatten()
         qa = self.robot.q_mes
         qa_dot = self.robot.v_mes
 
@@ -248,3 +249,19 @@ class SoloGaitEnv(gym.core.Env):
             
     def get_past_gait(self):
         return self.controller.planner.Cplanner.get_gait_past()
+
+    def get_base_vel(self):
+        '''
+        return the base linear and angular velocities in the body frame
+        '''
+        return np.concatenate((self.robot.b_baseVel, self.robot.baseAngularVelocity)).reshape((-1,1))
+
+    def test_validity(self):
+        self.reset()
+        for i in range(100):
+            a = random.randint(0,5)
+            o,r,d,i = self.step(a)
+            if d: self.reset()
+
+
+
