@@ -4,7 +4,6 @@ import torch
 import argparse
 from soloRL.agents.ppo.policy import Policy
 from soloRL.agents.ppo.envs import make_vec_envs
-from soloRL.baseEnv import SoloBaseEnv
 import time
 
 import re, glob
@@ -14,6 +13,7 @@ if __name__=='__main__':
     parser.add_argument('--checkpoint-dir', type=str, default=None)
     parser.add_argument('--config-file', type=str, default=None)
     parser.add_argument('--mode', type=str, default='gui')
+    parser.add_argument('--env-name', type=str, default='gait')
     parser.add_argument('--task', type=str, default=None)
     args = parser.parse_args()
 
@@ -22,6 +22,13 @@ if __name__=='__main__':
     config['mode'] = args.mode
     if args.task is not None:
         config['task'] = args.task
+
+    if args.env_name == 'base':
+        from soloRL.baseEnv import SoloBaseEnv
+        env_constructor = SoloBaseEnv
+    elif args.env_name == 'gait':
+        from soloRL.soloGaitEnv import SoloGaitEnv
+        env_constructor = SoloGaitEnv
 
     os.chdir(args.checkpoint_dir)
     """
@@ -35,7 +42,7 @@ if __name__=='__main__':
     filename = "solo.pt"
     ckpt = torch.load(filename)
 
-    env = make_vec_envs(config, 1, SoloBaseEnv, training=False)
+    env = make_vec_envs(config, 1, env_constructor, training=False)
     if 'ob_rms' in ckpt.keys():
         env.envs.ob_rms = ckpt['ob_rms']
 
@@ -47,7 +54,6 @@ if __name__=='__main__':
     while True:
         with torch.no_grad():
             _, action, _ = policy.act(obs, deterministic=True)
-            print(action)
 
         obs, reward, done, _ = env.step(action)
         if done:

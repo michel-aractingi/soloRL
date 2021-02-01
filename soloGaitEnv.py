@@ -9,6 +9,8 @@ from scripts import Controller, PyBulletSimulator
 
 feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
+gait_dict = {0: 'Noop', 1: 'Walking', 2: 'Troting', 3:'Pacing', 4:'Pronking', 5:'Bounding', 6:'Static'}
+
 Vmax = 0.7
 
 def new_random_vel():
@@ -43,7 +45,7 @@ class SoloGaitEnv(gym.core.Env):
 
         self.velID = 1
 
-        self.rl_dt = .4
+        self.rl_dt = self.T_gait #.4
 
         self.controller = \
             Controller(q_init=self.q_init, 
@@ -75,7 +77,7 @@ class SoloGaitEnv(gym.core.Env):
         self.robot_data = self.controller.myController.invKin.rdata
         self.feet_ids = [self.robot_model.getFrameId(n) for n in feet_frames_name]
 
-        self.num_gaits = 6
+        self.num_gaits = 5 # 6 with static
         self.action_space = gym.spaces.Discrete(self.num_gaits) # No noop action
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
@@ -96,6 +98,7 @@ class SoloGaitEnv(gym.core.Env):
 
     def step(self, action):
         assert not self._reset, "env.reset() must be called before step"
+        assert action < self.num_gaits
 
         self.continuous_time += self.dt
         self.discrete_time += 1
@@ -113,8 +116,8 @@ class SoloGaitEnv(gym.core.Env):
         state = self.get_observation()
         reward = self.get_reward()
 
-        if done and not info['timeout']:
-            reward = -10.
+        if not self.auto_vel_switch:
+            self.vel_ref = self.controller.joystick.v_ref
 
         self._info['episode_length'] += 1
         self._info['episode_reward'] += reward
@@ -149,7 +152,11 @@ class SoloGaitEnv(gym.core.Env):
                        enable_pyb_GUI=self.mode=='gui')
         """
         self.robot.reset()
-        if self.auto_vel_switch: self.reset_vel_ref(new_random_vel())
+        if self.auto_vel_switch: 
+            self.reset_vel_ref(new_random_vel())
+        else:
+            self.vel_ref = self.controller.joystick.v_ref
+        #self.reset_vel_ref(np.array([[2,0,0,0,0,0]]).T)
 
         self._reset = False
         self.timestep = 0
@@ -159,11 +166,6 @@ class SoloGaitEnv(gym.core.Env):
         self._goals_reached = 0
         self._info['episode_length'] = 0
         self._info['episode_reward'] = 0
-        #for k in self._rewards_info.keys():
-            #self._rewards_info[k] = 0.0
-
-        #for _ in range(np.random.randint(low=5,high=12)): #prev 20
-            #self.simulator_step()
         
         return self.get_observation()
 
@@ -177,14 +179,13 @@ class SoloGaitEnv(gym.core.Env):
 
     def get_reward(self, state=None, action=None):
         # reward is height + fwd vel
-
         torque_pen = 0.5 * np.square(self.robot.tau_ff).sum()
 
         base_vel = self.get_base_vel().flatten()
         vel_pen = 0.5 * np.square(self.vel_ref.flatten() - base_vel).sum()
 
-        reward = - 0.001 * torque_pen  - 0.5 * vel_pen
-        reward = reward.clip(-10.,0.)
+        reward = - 0.001 * torque_pen  - 1.0 * vel_pen
+        reward = 1 + reward.clip(-10.,0.)
 
         return reward
 
@@ -206,6 +207,7 @@ class SoloGaitEnv(gym.core.Env):
 
     def set_new_gait(self, gait_num):
         # + 1 because 0 corresponds to Noop
+        #print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
         if self.controller.planner.cg != gait_num + 1:
             self.controller.planner.gait_change = True
             self.controller.planner.cg = gait_num + 1
@@ -232,7 +234,7 @@ class SoloGaitEnv(gym.core.Env):
     def get_termination(self):
         info = {'timeout':False}
         # if fallen
-        if self.robot.baseState[0][-1] < 0.11:
+        if self.robot.baseState[0][-1] < 0.11 or self.controller.myController.error:
             return True, info
 
         if self.timestep >= self.episode_length:
@@ -259,9 +261,11 @@ class SoloGaitEnv(gym.core.Env):
     def test_validity(self):
         self.reset()
         for i in range(100):
-            a = random.randint(0,5)
+            a = random.randint(0,self.num_gaits-1)
             o,r,d,i = self.step(a)
-            if d: self.reset()
+            if d:
+                print(r)
+                self.reset()
 
 
 

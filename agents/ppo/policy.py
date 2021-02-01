@@ -24,7 +24,7 @@ class Policy(nn.Module):
         dist = self.pi_dist(actor_features)
 
         if deterministic:
-            action = dist.mean
+            action = dist.mode()
         else:
             action = dist.sample()
             
