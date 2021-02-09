@@ -13,7 +13,7 @@ def get_ppo_args():
     parser.add_argument('--hidden-size', type=int, default=32)
     parser.add_argument('--no-cuda', action='store_true', default=False)
 
-    parser.add_argument('--env-name', choices=['base', 'gait'], default='base')
+    parser.add_argument('--env-name', choices=['base', 'gait', 'contact'], default='base')
 
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--tau', type=float, default=0.95)
@@ -50,7 +50,7 @@ if __name__=='__main__':
     args = get_ppo_args()
     args.cuda = torch.cuda.is_available() and not args.no_cuda
     config = parse_config(args.config_file)
-    if args.env_name == 'gait':
+    if args.env_name in ('gait', 'contact'):
         config['task'] = ''
     elif args.task is not None:
         config['task'] = args.task
@@ -63,16 +63,16 @@ if __name__=='__main__':
         args.timestamp = datetime.now().strftime('%Y%m%d-') + args.timestamp
     
     if args.logdir is not None:
-        args.logdir = os.path.join(args.logdir, config['task'], 'Solo_' + args.timestamp)
+        args.logdir = os.path.join(args.logdir, config['task'], 'Solo' + args.env_name.capitalize() + '_' + args.timestamp)
         writer = SummaryWriter(args.logdir)
     else: 
         writer = None
 
     if args.env_name == 'base':
-        from soloRL.baseEnv import SoloBaseEnv
-        env_constructor = SoloBaseEnv
+        from soloRL.baseEnv import SoloBaseEnv as env_constructor
     elif args.env_name == 'gait':
-        from soloRL.soloGaitEnv import SoloGaitEnv
-        env_constructor = SoloGaitEnv
+        from soloRL.soloGaitEnv import SoloGaitEnv as env_constructor
+    elif args.env_name == 'contact':
+        from soloRL.soloGaitEnvContact import SoloGaitEnvContact as env_constructor
 
     ppo.train(args, config, env_constructor, writer)

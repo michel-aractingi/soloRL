@@ -1,5 +1,6 @@
 #from solo import SoloBase
 #from baseEnv import SoloBaseEnv
+from soloGaitEnvContact import SoloGaitEnv as SoloGaitEnvv2
 from soloGaitEnv import SoloGaitEnv
 import argparse
 

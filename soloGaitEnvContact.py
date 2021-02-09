@@ -20,7 +20,7 @@ def new_random_vel():
     return vel
 
 
-class SoloGaitEnv(gym.core.Env):
+class SoloGaitEnvContact(gym.core.Env):
     def __init__(self, config):
         
         self.config = config
@@ -45,7 +45,7 @@ class SoloGaitEnv(gym.core.Env):
 
         self.velID = 1
 
-        self.rl_dt = .4
+        self.rl_dt = self.T_gait / 2#0.32 # .4
 
         self.controller = \
             Controller(q_init=self.q_init, 
@@ -77,7 +77,7 @@ class SoloGaitEnv(gym.core.Env):
         self.robot_data = self.controller.myController.invKin.rdata
         self.feet_ids = [self.robot_model.getFrameId(n) for n in feet_frames_name]
 
-        self.num_gaits = 5 # 6 with static
+        self.num_gaits = 9
         self.action_space = gym.spaces.Discrete(self.num_gaits) # No noop action
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
@@ -98,12 +98,12 @@ class SoloGaitEnv(gym.core.Env):
 
     def step(self, action):
         assert not self._reset, "env.reset() must be called before step"
-        assert action < self.num_gaits
+        #assert action < self.num_gaits
 
         self.continuous_time += self.dt
         self.discrete_time += 1
         self.timestep += 1
-        self.set_new_gait(np.int(action))
+        self.set_new_gait(action)
         self.robot.UpdateMeasurment()
 
         done, info = self.get_termination()
@@ -170,6 +170,7 @@ class SoloGaitEnv(gym.core.Env):
         return self.get_observation()
 
     def reset_vel_ref(self, vel):
+        #vel  =np.array([[0,0,0,0,0,0]]).T 
         self.vel_ref = vel
         self.controller.v_ref = vel.reshape(-1,1)
 
@@ -206,11 +207,8 @@ class SoloGaitEnv(gym.core.Env):
         self.robot.SendCommand(WaitEndOfCycle=False)
 
     def set_new_gait(self, gait_num):
-        # + 1 because 0 corresponds to Noop
-        print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
-        if self.controller.planner.cg != gait_num + 1:
-            self.controller.planner.gait_change = True
-            self.controller.planner.cg = gait_num + 1
+        #print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
+        self.controller.planner.cg = gait_num 
 
     def get_observation(self):
 
