@@ -207,7 +207,7 @@ class SoloGaitEnv(gym.core.Env):
 
     def set_new_gait(self, gait_num):
         # + 1 because 0 corresponds to Noop
-        print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
+        #print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
         if self.controller.planner.cg != gait_num + 1:
             self.controller.planner.gait_change = True
             self.controller.planner.cg = gait_num + 1

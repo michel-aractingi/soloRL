@@ -114,10 +114,10 @@ class SoloGaitEnvContact(gym.core.Env):
         self.continuous_time += self.dt
         self.discrete_time += 1
         self.timestep += 1
-        self.set_new_gait(action)
+        self.set_new_gait(np.int(action))
         self.robot.UpdateMeasurment()
 
-        self.past_gaits.append(action)
+        self.past_gaits.append(np.int(action))
 
         done, info = self.get_termination()
         while self.discrete_time % (self.rl_dt/self.dt)!=0 and not done:
@@ -221,6 +221,7 @@ class SoloGaitEnvContact(gym.core.Env):
 
     def set_new_gait(self, gait_num):
         #print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
+        self.controller.planner.gait_change = True
         self.controller.planner.cg = gait_num 
 
     def get_observation(self):
@@ -235,8 +236,7 @@ class SoloGaitEnvContact(gym.core.Env):
 
         pfeet = self.get_feet_positions().flatten()
 
-        #executed_gait = self.get_past_gait()[:2].flatten()
-        executed_past_seq = np.array([gait_dict[i] for i in self.past_gaits]).flatten()
+        executed_past_seq = np.array([gait_dict[i] for i in self.past_gaits], dtype=np.float32).flatten()
 
         history = ...
 
