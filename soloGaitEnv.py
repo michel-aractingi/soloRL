@@ -77,7 +77,7 @@ class SoloGaitEnv(gym.core.Env):
         self.robot_data = self.controller.myController.invKin.rdata
         self.feet_ids = [self.robot_model.getFrameId(n) for n in feet_frames_name]
 
-        self.num_gaits = 5 # 6 with static
+        self.num_gaits = 6 # 6 with static
         self.action_space = gym.spaces.Discrete(self.num_gaits) # No noop action
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  

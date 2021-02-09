@@ -6,10 +6,20 @@ import pybullet as p
 
 #os.chdir('/home/quadruped-reactive-walking-feature-merge-mpc-tsid/scripts/')
 from scripts import Controller, PyBulletSimulator
+from collections import deque
 
 feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
-gait_dict = {0: 'Noop', 1: 'Walking', 2: 'Troting', 3:'Pacing', 4:'Pronking', 5:'Bounding', 6:'Static'}
+gait_dict = {0: [1.,1.,1.,1.],
+             1: [1.,1.,1.,0.], 
+             2: [1.,1.,0.,1.], 
+             3: [1.,0.,1.,1.], 
+             4: [0.,1.,1.,1.], 
+             5: [1.,0.,1.,0.], 
+             6: [0.,1.,0.,1.], 
+             7: [1.,0.,0.,1.], 
+             8: [0.,1.,1.,0.],
+             -1: [0.,0.,0.,0.]}
 
 Vmax = 1.2
 
@@ -76,13 +86,14 @@ class SoloGaitEnvContact(gym.core.Env):
         self.robot_model = self.controller.myController.invKin.rmodel
         self.robot_data = self.controller.myController.invKin.rdata
         self.feet_ids = [self.robot_model.getFrameId(n) for n in feet_frames_name]
+        self.past_gaits = deque([-1,-1,-1], maxlen=3) # get past 3 gaits
 
         self.num_gaits = 9
         self.action_space = gym.spaces.Discrete(self.num_gaits) # No noop action
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
         # 4 rel foot pose, 6 vel_ref, 10 gait seq = 62
-        high = np.inf * np.ones([62])       
+        high = np.inf * np.ones([64])       
         self.observation_space = gym.spaces.Box(-high, high)
 
         self.continuous_time = 0.0 
@@ -105,6 +116,8 @@ class SoloGaitEnvContact(gym.core.Env):
         self.timestep += 1
         self.set_new_gait(action)
         self.robot.UpdateMeasurment()
+
+        self.past_gaits.append(action)
 
         done, info = self.get_termination()
         while self.discrete_time % (self.rl_dt/self.dt)!=0 and not done:
@@ -222,11 +235,12 @@ class SoloGaitEnvContact(gym.core.Env):
 
         pfeet = self.get_feet_positions().flatten()
 
-        executed_gait = self.get_past_gait()[:2].flatten()
+        #executed_gait = self.get_past_gait()[:2].flatten()
+        executed_past_seq = np.array([gait_dict[i] for i in self.past_gaits]).flatten()
 
         history = ...
 
-        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, executed_gait, self.vel_ref.flatten()])
+        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, executed_past_seq, self.vel_ref.flatten()])
 
 
     def get_termination(self):

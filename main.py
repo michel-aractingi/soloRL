@@ -1,6 +1,6 @@
 #from solo import SoloBase
 #from baseEnv import SoloBaseEnv
-from soloGaitEnvContact import SoloGaitEnv as SoloGaitEnvv2
+from soloGaitEnvContact import SoloGaitEnvContact
 from soloGaitEnv import SoloGaitEnv
 import argparse
 
@@ -21,5 +21,5 @@ if __name__ == '__main__':
     else:
         config = vars(args)
 
-    env = SoloGaitEnv(config)
+    env = SoloGaitEnvContact(config)
     import pudb; pudb.set_trace()
