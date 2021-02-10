@@ -21,7 +21,7 @@ gait_dict = {0: [1.,1.,1.,1.],
              8: [0.,1.,1.,0.],
              -1: [0.,0.,0.,0.]}
 
-Vmax = 1.2
+Vmax = 0.5
 
 def new_random_vel():
     mask = np.array([[1,0,0,0,0,0]])
@@ -100,6 +100,7 @@ class SoloGaitEnvContact(gym.core.Env):
         self.discrete_time = 0.0
 
         self._reset = True
+        self._hard_reset = False
         self.timestep = 0
         self._reward_sum = 0
         self._rewards_info = {}
@@ -121,13 +122,19 @@ class SoloGaitEnvContact(gym.core.Env):
 
         done, info = self.get_termination()
         while self.discrete_time % (self.rl_dt/self.dt)!=0 and not done:
-            self.controller_step()
+            err = self.controller_step()
             self.continuous_time += self.dt
             self.discrete_time += 1
             done, info = self.get_termination()
 
         state = self.get_observation()
         reward = self.get_reward()
+        if info['nan'] or np.isnan(np.sum(state)):
+            state = np.zeros(self.observation_space.shape)
+            reward = 0.0
+            self._hard_reset = True
+            done  = True
+            print(action)
 
         if not self.auto_vel_switch:
             self.vel_ref = self.controller.joystick.v_ref
@@ -144,27 +151,13 @@ class SoloGaitEnvContact(gym.core.Env):
         return state, reward, done, self._info.copy()
 
     def reset(self):
-        self.controller.reset()
-        """
-        self.controller = \
-            Controller(q_init=self.q_init, 
-                       envID=0,
-                       velID=self.velID,
-                       dt_tsid=self.dt_wbc,
-                       dt_mpc=self.dt_mpc, 
-                       k_mpc=self.k_mpc,
-                       t=0,
-                       T_gait=self.T_gait,
-                       T_mpc=self.T_mpc,
-                       N_SIMULATION=50000,
-                       type_MPC=True,
-                       pyb_feedback=True, 
-                       on_solo8= not self.solo12,
-                       use_flat_plane= self.use_flat_ground,
-                       predefined_vel=True,
-                       enable_pyb_GUI=self.mode=='gui')
-        """
-        self.robot.reset()
+        if self._hard_reset or self.controller.error_flag ==4:
+            print('reset_hard')
+            self.reset_hard()
+            self._hard_reset = False
+        else:
+            self.controller.reset()
+            self.robot.reset()
         if self.auto_vel_switch: 
             self.reset_vel_ref(new_random_vel())
         else:
@@ -209,6 +202,9 @@ class SoloGaitEnvContact(gym.core.Env):
 
         # Desired torques
         self.controller.compute(self.robot)
+        if self.controller.error_flag == 4:
+            print('error')
+            return 1
 
         # Set desired quantities for the actuators
         self.robot.SetDesiredJointPDgains(self.controller.result.P, self.controller.result.D)
@@ -218,6 +214,7 @@ class SoloGaitEnvContact(gym.core.Env):
 
         # Step simulation for one dt
         self.robot.SendCommand(WaitEndOfCycle=False)
+        return 0
 
     def set_new_gait(self, gait_num):
         #print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
@@ -242,11 +239,47 @@ class SoloGaitEnvContact(gym.core.Env):
 
         return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, executed_past_seq, self.vel_ref.flatten()])
 
+    def reset_hard(self):
+       
+        del self.controller, self.robot
+        self.controller = \
+            Controller(q_init=self.q_init, 
+                       envID=0,
+                       velID=self.velID,
+                       dt_tsid=self.dt_wbc,
+                       dt_mpc=self.dt_mpc, 
+                       k_mpc=self.k_mpc,
+                       t=0,
+                       T_gait=self.T_gait,
+                       T_mpc=self.T_mpc,
+                       N_SIMULATION=50000,
+                       type_MPC=True,
+                       pyb_feedback=True, 
+                       on_solo8= not self.solo12,
+                       use_flat_plane= self.use_flat_ground,
+                       predefined_vel=True,
+                       enable_pyb_GUI=self.mode=='gui')
+        
+        #self.controller.reset()
+        self.robot = PyBulletSimulator()
+        self.robot.Init(calibrateEncoders=True, 
+                        q_init=self.q_init,
+                        envID=0,
+                        use_flat_plane=self.use_flat_ground,
+                        enable_pyb_GUI=self.mode=='gui',
+                        dt=self.dt_wbc)
 
     def get_termination(self):
-        info = {'timeout':False}
+        info = {'timeout':False, 'nan': False}
         # if fallen
         if self.robot.baseState[0][-1] < 0.11 or self.controller.myController.error:
+            return True, info
+
+        # check for nans
+        if self.controller.error_flag == 4:
+            print('nan detected')
+            info['nan'] = True
+            self._hard_reset = True
             return True, info
 
         if self.timestep >= self.episode_length:
