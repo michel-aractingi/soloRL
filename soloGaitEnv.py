@@ -11,10 +11,10 @@ feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
 gait_dict = {0: 'Noop', 1: 'Walking', 2: 'Troting', 3:'Pacing', 4:'Pronking', 5:'Bounding', 6:'Static'}
 
-Vmax = 1.2
+Vmax = .7
 
 def new_random_vel():
-    mask = np.array([[1,0,0,0,0,0]])
+    mask = np.array([[0,0,0,0,0,0]])
     vel = (np.random.random((6,1)) - 0.5 ) * 2 * Vmax
     vel *= mask.T
     return vel
@@ -46,6 +46,7 @@ class SoloGaitEnv(gym.core.Env):
         self.velID = 1
 
         self.rl_dt = .4
+        self.k_rl = self.rl_dt/self.dt
 
         self.controller = \
             Controller(q_init=self.q_init, 
@@ -77,7 +78,7 @@ class SoloGaitEnv(gym.core.Env):
         self.robot_data = self.controller.myController.invKin.rdata
         self.feet_ids = [self.robot_model.getFrameId(n) for n in feet_frames_name]
 
-        self.num_gaits = 6 # 6 with static
+        self.num_gaits = 9 # 6 with static
         self.action_space = gym.spaces.Discrete(self.num_gaits) # No noop action
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
@@ -89,6 +90,7 @@ class SoloGaitEnv(gym.core.Env):
         self.discrete_time = 0.0
 
         self._reset = True
+        self._hard_reset = False
         self.timestep = 0
         self._reward_sum = 0
         self._rewards_info = {}
@@ -107,14 +109,27 @@ class SoloGaitEnv(gym.core.Env):
         self.robot.UpdateMeasurment()
 
         done, info = self.get_termination()
-        while self.discrete_time % (self.rl_dt/self.dt)!=0 and not done:
+        torque_pen = 0; vel_pen = 0;
+        while self.discrete_time % (self.k_rl)!=0 and not done:
             self.controller_step()
             self.continuous_time += self.dt
             self.discrete_time += 1
             done, info = self.get_termination()
+            # To calculate reward
+            torque_pen += np.square(self.robot.tau_ff).sum()
+            base_vel = self.get_base_vel().flatten()
+            vel_pen += np.square(self.vel_ref.flatten() - base_vel).sum()
+
 
         state = self.get_observation()
-        reward = self.get_reward()
+        #reward = self.get_reward()
+        reward = 1 - (1./self.k_rl) * (0.005*torque_pen + vel_pen)
+        if info['nan'] or np.isnan(np.sum(state)):
+            state = np.zeros(self.observation_space.shape)
+            reward = 0.0
+            self._hard_reset = True
+            done  = True
+
 
         if not self.auto_vel_switch:
             self.vel_ref = self.controller.joystick.v_ref
@@ -123,6 +138,8 @@ class SoloGaitEnv(gym.core.Env):
         self._info['episode_reward'] += reward
         self._info = {**self._info, **info}
         self._info['success'] = info['timeout'] and done
+        self._info['dr/Torque_pen'] += torque_pen/self.k_rl
+        self._info['dr/body_velocity'] += vel_pen/self.k_rl
 
         # Change velocity command every N steps
         if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
@@ -131,27 +148,12 @@ class SoloGaitEnv(gym.core.Env):
         return state, reward, done, self._info.copy()
 
     def reset(self):
-        self.controller.reset()
-        """
-        self.controller = \
-            Controller(q_init=self.q_init, 
-                       envID=0,
-                       velID=self.velID,
-                       dt_tsid=self.dt_wbc,
-                       dt_mpc=self.dt_mpc, 
-                       k_mpc=self.k_mpc,
-                       t=0,
-                       T_gait=self.T_gait,
-                       T_mpc=self.T_mpc,
-                       N_SIMULATION=50000,
-                       type_MPC=True,
-                       pyb_feedback=True, 
-                       on_solo8= not self.solo12,
-                       use_flat_plane= self.use_flat_ground,
-                       predefined_vel=True,
-                       enable_pyb_GUI=self.mode=='gui')
-        """
-        self.robot.reset()
+        if self._hard_reset:
+            self.reset_hard()
+            self._hard_reset = False
+        else:
+            self.controller.reset()
+            self.robot.reset()
         if self.auto_vel_switch: 
             self.reset_vel_ref(new_random_vel())
         else:
@@ -166,6 +168,8 @@ class SoloGaitEnv(gym.core.Env):
         self._goals_reached = 0
         self._info['episode_length'] = 0
         self._info['episode_reward'] = 0
+        self._info['dr/Torque_pen'] = 0
+        self._info['dr/body_velocity'] = 0
         
         return self.get_observation()
 
@@ -212,6 +216,35 @@ class SoloGaitEnv(gym.core.Env):
             self.controller.planner.gait_change = True
             self.controller.planner.cg = gait_num + 1
 
+    def reset_hard(self):
+        del self.controller, self.robot
+        self.controller = \
+            Controller(q_init=self.q_init,
+                       envID=0,
+                       velID=self.velID,
+                       dt_tsid=self.dt_wbc,
+                       dt_mpc=self.dt_mpc,
+                       k_mpc=self.k_mpc,
+                       t=0,
+                       T_gait=self.T_gait,
+                       T_mpc=self.T_mpc,
+                       N_SIMULATION=50000,
+                       type_MPC=True,
+                       pyb_feedback=True,
+                       on_solo8= not self.solo12,
+                       use_flat_plane= self.use_flat_ground,
+                       predefined_vel=True,
+                       enable_pyb_GUI=self.mode=='gui')
+
+        #self.controller.reset()
+        self.robot = PyBulletSimulator()
+        self.robot.Init(calibrateEncoders=True,
+                        q_init=self.q_init,
+                        envID=0,
+                        use_flat_plane=self.use_flat_ground,
+                        enable_pyb_GUI=self.mode=='gui',
+                        dt=self.dt_wbc)
+
     def get_observation(self):
 
         self.robot.UpdateMeasurment()
@@ -232,7 +265,16 @@ class SoloGaitEnv(gym.core.Env):
 
 
     def get_termination(self):
-        info = {'timeout':False}
+        info = {'timeout':False, 'nan': False}
+        
+        # check for nans
+        if self.controller.error_flag == 4:
+            print('nan detected')
+            info['nan'] = True
+            self._hard_reset = True
+            return True, info
+
+       
         # if fallen
         if self.robot.baseState[0][-1] < 0.11 or self.controller.myController.error:
             return True, info

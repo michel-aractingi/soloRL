@@ -22,11 +22,16 @@ gait_dict = {0: [1.,1.,1.,1.],
              -1: [0.,0.,0.,0.]}
 
 Vmax = 0.5
+gait_name_dict = {0:'Static', 1:'Walk1', 2:'Walk2', 3:'Walk3', 4:'Walk4', 5:'Pace1', 6:'Pace2', 7:'Trot1', 8:'Trot2'}
+
+# External Forces
+magnitudes = [0, 3, 5, 10]
+durations = [1000, 2000, 3000, 4000, 5000]
 
 def new_random_vel():
     mask = np.array([[1,0,0,0,0,0]])
-    vel = (np.random.random((6,1)) - 0.5 ) * 2 * Vmax
-    vel *= mask.T
+    vel = (np.random.random((1,6)) - 0.5 ) * 2 * Vmax
+    vel *= mask
     return vel
 
 
@@ -52,10 +57,12 @@ class SoloGaitEnvContact(gym.core.Env):
         self.vel_switch = config.get('vel_switch', 30)
         self.use_flat_ground = config.get('flat_ground', True)
         self.auto_vel_switch = config.get('auto_vel_switch', True)
+        self.add_external_force = config.get('add_external_force', False)
 
         self.velID = 1
 
         self.rl_dt = self.T_gait / 2#0.32 # .4
+        self.k_rl = int(self.rl_dt/self.dt)
 
         self.controller = \
             Controller(q_init=self.q_init, 
@@ -110,7 +117,7 @@ class SoloGaitEnvContact(gym.core.Env):
 
     def step(self, action):
         assert not self._reset, "env.reset() must be called before step"
-        #assert action < self.num_gaits
+        assert action < self.num_gaits
 
         self.continuous_time += self.dt
         self.discrete_time += 1
@@ -121,20 +128,29 @@ class SoloGaitEnvContact(gym.core.Env):
         self.past_gaits.append(np.int(action))
 
         done, info = self.get_termination()
-        while self.discrete_time % (self.rl_dt/self.dt)!=0 and not done:
+        torque_pen = 0; vel_pen = 0;
+        for i in range(self.k_rl):
+            self._apply_force(self.controller.k) # If noise is added
             err = self.controller_step()
             self.continuous_time += self.dt
             self.discrete_time += 1
             done, info = self.get_termination()
+            # To calculate reward
+            torque_pen += np.square(self.robot.tau_ff).sum()
+            base_vel = self.get_base_vel().flatten()
+            vel_pen += np.square(self.vel_ref.flatten() - base_vel).sum()
+            if done:
+                break;
 
         state = self.get_observation()
-        reward = self.get_reward()
+        reward = 1 - (1./self.k_rl) * (0.005*torque_pen + vel_pen)
+        #print('Rewards vel:', vel_pen/self.k_rl, '  Torque: ', torque_pen/self.k_rl)
+        #reward = self.get_reward()
         if info['nan'] or np.isnan(np.sum(state)):
             state = np.zeros(self.observation_space.shape)
             reward = 0.0
             self._hard_reset = True
             done  = True
-            print(action)
 
         if not self.auto_vel_switch:
             self.vel_ref = self.controller.joystick.v_ref
@@ -144,9 +160,15 @@ class SoloGaitEnvContact(gym.core.Env):
         self._info = {**self._info, **info}
         self._info['success'] = info['timeout'] and done
 
+        self._info['dr/Torque_pen'] += torque_pen/self.k_rl
+        self._info['dr/body_velocity'] += vel_pen/self.k_rl
+
         # Change velocity command every N steps
         if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
             self.reset_vel_ref(new_random_vel())
+        
+        #print('gait_f \n',self.controller.planner.Cplanner.get_gait()[:6])
+        #print('gait_f_des \n',self.controller.planner.Cplanner.get_gait_des()[:6])
 
         return state, reward, done, self._info.copy()
 
@@ -172,13 +194,17 @@ class SoloGaitEnvContact(gym.core.Env):
         self._goals_reached = 0
         self._info['episode_length'] = 0
         self._info['episode_reward'] = 0
-        
+        self._info['dr/Torque_pen'] = 0
+        self._info['dr/body_velocity'] = 0
+
+        self.create_force_function()
+
         return self.get_observation()
 
     def reset_vel_ref(self, vel):
-        #vel  =np.array([[0,0,0,0,0,0]]).T 
+        vel = np.array([[0.0,0,0,0,0,0]])
         self.vel_ref = vel
-        self.controller.v_ref = vel.reshape(-1,1)
+        self.controller.v_ref = vel.T
 
     def close(self):
         self.robot.Stop()
@@ -191,8 +217,9 @@ class SoloGaitEnvContact(gym.core.Env):
         base_vel = self.get_base_vel().flatten()
         vel_pen = 0.5 * np.square(self.vel_ref.flatten() - base_vel).sum()
 
-        reward = - 0.01 * torque_pen  - 1.0 * vel_pen
+        reward = - 0.01 * torque_pen  - 2.0 * vel_pen
         reward = 1 + reward.clip(-10.,0.)
+        #print('Velocity difference', vel_pen, reward)
 
         return reward
 
@@ -217,9 +244,9 @@ class SoloGaitEnvContact(gym.core.Env):
         return 0
 
     def set_new_gait(self, gait_num):
-        #print('Timestep {}, Gait: {}'.format(self.timestep, gait_dict[gait_num + 1]))
+        #print('Timestep {}, Contact Seq: {} {}'.format(self.timestep, gait_name_dict[gait_num], gait_num))
         self.controller.planner.gait_change = True
-        self.controller.planner.cg = gait_num 
+        self.controller.planner.cg = gait_num #+ 1 
 
     def get_observation(self):
 
@@ -302,6 +329,18 @@ class SoloGaitEnvContact(gym.core.Env):
         return the base linear and angular velocities in the body frame
         '''
         return np.concatenate((self.robot.b_baseVel, self.robot.baseAngularVelocity)).reshape((-1,1))
+
+    def create_force_function(self):
+        if not self.add_external_force:
+            self._apply_force = lambda k: None
+        else:
+            M = np.zeros((3,))
+            F = np.zeros((3,))
+            F[random.choices([0,1,2])] = random.choices(magnitudes)
+            start_itr = random.randint(1000, self.k_rl * self.episode_length - 1000)
+            duration = random.choice(durations)
+            self._apply_force = lambda k: self.robot.pyb_sim.apply_external_force(k, start_itr, duration, F, M)
+
 
     def test_validity(self):
         self.reset()

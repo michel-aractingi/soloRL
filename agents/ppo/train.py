@@ -101,17 +101,21 @@ def train(args, config, env_constructor, writer=None):
 
         ep_buffer.reset()
 
+        total_num_steps = (j + 1) * args.num_agents * args.num_steps
         # save for every interval-th episode or for the last epoch
         if (j % args.save_interval == 0
                 or j == num_updates - 1) and args.logdir is not None:
 
             torch.save({
-                'state_dict': actor_critic.state_dict(),
+                'update': j, 'state_dict': actor_critic.state_dict(),
+                'ob_rms': getattr(envs.envs, 'ob_rms', None)}, 
+                os.path.join(args.logdir, "solo_{}.pt".format(total_num_steps)))
+            torch.save({
+                'update': j, 'state_dict': actor_critic.state_dict(),
                 'ob_rms': getattr(envs.envs, 'ob_rms', None)}, 
                 os.path.join(args.logdir, "solo.pt"))
 
         if j % args.log_interval == 0:
-            total_num_steps = (j + 1) * args.num_agents * args.num_steps
             end = time.time()
             print(
                     "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n mean/max length {:.0f}/{:0f}  mean success {:0f} \n entropy {:.1f} value loss {:.1f} action loss {:.1f}"
@@ -131,3 +135,10 @@ def train(args, config, env_constructor, writer=None):
                 utils.log(writer, episode_length, 'Episode/length', total_num_steps)
                 utils.log(writer, episode_rewards_dict, '', total_num_steps)
 
+
+    torch.save({ 
+        'update': j, 'state_dict': actor_critic.state_dict(),
+        'ob_rms': getattr(envs.envs, 'ob_rms', None)}, 
+         os.path.join(args.logdir, "solo.pt"))
+
+    import sys; sys.exit()

@@ -29,6 +29,9 @@ if __name__=='__main__':
     elif args.env_name == 'gait':
         from soloRL.soloGaitEnv import SoloGaitEnv
         env_constructor = SoloGaitEnv
+    elif args.env_name == 'contact':
+        from soloRL.soloGaitEnvContact import SoloGaitEnvContact
+        env_constructor = SoloGaitEnvContact
 
     os.chdir(args.checkpoint_dir)
     """
@@ -50,14 +53,22 @@ if __name__=='__main__':
     policy.load_state_dict(ckpt['state_dict'])
     policy.eval()
         
+    ep_len = []
+    ep_R = []
     obs = env.reset()
-    while True:
+    episode = 0
+    N = 10
+    while episode < 10:
         with torch.no_grad():
             _, action, _ = policy.act(obs, deterministic=True)
 
-        obs, reward, done, _ = env.step(action)
+        obs, reward, done, infos = env.step(action)
+        
         if done:
-            obs = env.reset()
-        time.sleep(0.05)
-
-    env.close()
+            ep_len.append(infos[0]['episode_length'])
+            ep_R.append(infos[0]['episode_reward'])
+            print(episode)
+            episode += 1
+    print('mean length {} mean reward {}'.format(sum(ep_len)/10,sum(ep_R)/10))
+    #import pudb; pudb.set_trace()
+    import sys; sys.exit()
