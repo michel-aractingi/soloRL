@@ -25,7 +25,7 @@ Vmax = 0.5
 gait_name_dict = {0:'Static', 1:'Walk1', 2:'Walk2', 3:'Walk3', 4:'Walk4', 5:'Pace1', 6:'Pace2', 7:'Trot1', 8:'Trot2'}
 
 # External Forces
-magnitudes = [0, 3, 5, 10]
+magnitudes = [0, 3, 5, 10, 12]
 durations = [1000, 2000, 3000, 4000, 5000]
 
 def new_random_vel():
@@ -202,7 +202,7 @@ class SoloGaitEnvContact(gym.core.Env):
         return self.get_observation()
 
     def reset_vel_ref(self, vel):
-        vel = np.array([[0.0,0,0,0,0,0]])
+        vel = np.array([[0.25,0,0,0,0,0]])
         self.vel_ref = vel
         self.controller.v_ref = vel.T
 
@@ -336,9 +336,12 @@ class SoloGaitEnvContact(gym.core.Env):
         else:
             M = np.zeros((3,))
             F = np.zeros((3,))
-            F[random.choices([0,1,2])] = random.choices(magnitudes)
-            start_itr = random.randint(1000, self.k_rl * self.episode_length - 1000)
+            F[random.choices([0,1,2])] = random.choices(magnitudes) 
+            sign = random.choices([-1,1])[0]
+            F *= np.array([sign, sign, 1.])
+            start_itr = random.randint(500, int(self.k_rl * self.episode_length *(2/3)))
             duration = random.choice(durations)
+            print('apply force with magniture {} starting at iteration {} for a duration of {} steps'.format(F,start_itr, duration))
             self._apply_force = lambda k: self.robot.pyb_sim.apply_external_force(k, start_itr, duration, F, M)
 
 

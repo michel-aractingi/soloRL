@@ -50,10 +50,10 @@ if __name__=='__main__':
     args = get_ppo_args()
     args.cuda = torch.cuda.is_available() and not args.no_cuda
     config = parse_config(args.config_file)
-    if args.env_name in ('gait', 'contact'):
-        config['task'] = ''
-    elif args.task is not None:
-        config['task'] = args.task
+    #if args.env_name in ('gait', 'contact'):
+        #config['task'] = ''
+    #elif args.task is not None:
+        #config['task'] = args.task
     
     args.episode_length = config['episode_length']
     args.num_steps = args.episode_length
@@ -63,7 +63,8 @@ if __name__=='__main__':
         args.timestamp = datetime.now().strftime('%Y%m%d-') + args.timestamp
     
     if args.logdir is not None:
-        args.logdir = os.path.join(args.logdir, config['task'], 'Solo' + args.env_name.capitalize() + '_' + args.timestamp)
+        task = args.task + '_' if args.task is not None else ''
+        args.logdir = os.path.join(args.logdir, config['task'], 'Solo' + args.env_name.capitalize() + '_' + task + args.timestamp)
         writer = SummaryWriter(args.logdir)
     else: 
         writer = None
