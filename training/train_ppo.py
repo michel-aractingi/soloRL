@@ -64,7 +64,7 @@ if __name__=='__main__':
     
     if args.logdir is not None:
         task = args.task + '_' if args.task is not None else ''
-        args.logdir = os.path.join(args.logdir, config['task'], 'Solo' + args.env_name.capitalize() + '_' + task + args.timestamp)
+        args.logdir = os.path.join(args.logdir, 'Solo' + args.env_name.capitalize() + '_' + task + args.timestamp)
         writer = SummaryWriter(args.logdir)
     else: 
         writer = None
