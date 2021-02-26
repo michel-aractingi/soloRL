@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Normal, Categorical
+from torch.distributions import Normal, Categorical, Bernoulli
 
 from soloRL.agents.utils import init_layer
 
@@ -16,6 +16,8 @@ class Policy(nn.Module):
             self.pi_dist = CategoricalHead(self.base.output_size, action_space.n)
         elif action_space.__class__.__name__ == 'Box':
             self.pi_dist = DiagGaussian(self.base.output_size, action_space.shape[0])
+        elif action_space.__class__.__name__ == 'MultiBinary':
+            self.pi_dist = BernoulliHead(self.base.output_size, action_space.n)
         else:
             raise NotImplementedError
 
@@ -89,6 +91,14 @@ class CategoricalHead(nn.Module):
     def forward(self, x):
         return ModCategorical(logits=self.linear(x))
 
+class BernoulliHead(nn.Module):
+    def __init__(self, num_inputs, num_outputs):
+        super(BernoulliHead, self).__init__()
+        self.linear = init_layer(nn.Linear(num_inputs, num_outputs))
+
+    def forward(self, x):
+        return ModBernoulli(logits=self.linear(x))
+     
 class ModNormal(Normal):
     def log_probs(self, actions):
         return super().log_prob(actions).sum(-1, keepdim=True)
@@ -109,3 +119,12 @@ class ModCategorical(Categorical):
     def mode(self):
         return self.probs.argmax(dim=-1, keepdim=True)
 
+class ModBernoulli(Bernoulli):
+    def log_probs(self, actions):
+        return super().log_prob(actions).view(actions.size(0), -1).sum(-1).unsqueeze(-1)
+
+    def entropy(self):
+        return super().entropy().sum(-1)
+
+    def mode(self):
+        return torch.gt(self.probs, 0.5).float()

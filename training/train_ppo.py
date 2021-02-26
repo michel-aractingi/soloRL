@@ -75,5 +75,7 @@ if __name__=='__main__':
         from soloRL.soloGaitEnv import SoloGaitEnv as env_constructor
     elif args.env_name == 'contact':
         from soloRL.soloGaitEnvContact import SoloGaitEnvContact as env_constructor
+    elif args.env_name == 'mbgait':
+        from soloRL.soloGaitMBEnv import SoloGaitMBEnv as env_constructor
 
     ppo.train(args, config, env_constructor, writer)

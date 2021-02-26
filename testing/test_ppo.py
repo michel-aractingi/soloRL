@@ -15,6 +15,8 @@ if __name__=='__main__':
     parser.add_argument('--mode', type=str, default='gui')
     parser.add_argument('--env-name', type=str, default='gait')
     parser.add_argument('--task', type=str, default=None)
+    parser.add_argument('--num-runs', type=int, default=10)
+    parser.add_argument('--store-action-histogram', action='store_true', default=False)
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:
@@ -52,23 +54,32 @@ if __name__=='__main__':
     policy = Policy(env.observation_space.shape, env.action_space)
     policy.load_state_dict(ckpt['state_dict'])
     policy.eval()
+
+    if args.store_action_histogram:
+        a_hist = [0 for _ in range(env.action_space.n)]
         
     ep_len = []
+    ep_success = []
     ep_R = []
     obs = env.reset()
     episode = 0
-    N = 10
-    while episode < 10:
+    while episode < args.num_runs:
         with torch.no_grad():
             _, action, _ = policy.act(obs, deterministic=True)
 
         obs, reward, done, infos = env.step(action)
+
+        if args.store_action_histogram:
+            a_hist[int(action.item())] += 1
         
         if done:
             ep_len.append(infos[0]['episode_length'])
             ep_R.append(infos[0]['episode_reward'])
+            ep_success.append(infos[0]['success'])
             print(episode)
             episode += 1
-    print('mean length {} mean reward {}'.format(sum(ep_len)/10,sum(ep_R)/10))
+    print('mean length {} mean reward {} mean success {}'.format(sum(ep_len)/args.num_runs,sum(ep_R)/args.num_runs, sum(ep_success)/args.num_runs))
+    if args.store_action_histogram:
+        print(a_hist)
     #import pudb; pudb.set_trace()
     import sys; sys.exit()

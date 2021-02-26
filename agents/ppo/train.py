@@ -31,12 +31,12 @@ def train(args, config, env_constructor, writer=None):
 
     envs = make_vec_envs(config, args.num_agents, env_constructor, args.gamma, device)
 
-    if envs.action_space.__class__.__name__ == 'Box':
-        action_dim = envs.action_space.shape[0]
-        storage_dim = action_dim
-    else:
+    if envs.action_space.__class__.__name__ == 'Discrete':
         action_dim = envs.action_space.n
         storage_dim = 1
+    else:
+        action_dim = envs.action_space.shape[0]
+        storage_dim = action_dim
 
     actor_critic = Policy(envs.observation_space.shape, envs.action_space)
     actor_critic.to(device)

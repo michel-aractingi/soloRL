@@ -2,6 +2,7 @@
 #from baseEnv import SoloBaseEnv
 from soloGaitEnvContact import SoloGaitEnvContact
 from soloGaitEnv import SoloGaitEnv
+from soloGaitMBEnv import SoloGaitMBEnv
 import argparse
 
 if __name__ == '__main__':
@@ -21,5 +22,5 @@ if __name__ == '__main__':
     else:
         config = vars(args)
 
-    env = SoloGaitEnvContact(config)
+    env = SoloGaitMBEnv(config)
     import pudb; pudb.set_trace()
