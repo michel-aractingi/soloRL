@@ -22,5 +22,5 @@ if __name__ == '__main__':
     else:
         config = vars(args)
 
-    env = SoloGaitMBEnv(config)
+    env = SoloGaitEnvContact(config)
     import pudb; pudb.set_trace()

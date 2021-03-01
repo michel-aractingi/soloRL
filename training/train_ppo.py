@@ -13,7 +13,7 @@ def get_ppo_args():
     parser.add_argument('--hidden-size', type=int, default=32)
     parser.add_argument('--no-cuda', action='store_true', default=False)
 
-    parser.add_argument('--env-name', choices=['base', 'gait', 'contact'], default='base')
+    parser.add_argument('--env-name', choices=['base', 'gait', 'contact', 'mbgait'], default='base')
 
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--tau', type=float, default=0.95)
