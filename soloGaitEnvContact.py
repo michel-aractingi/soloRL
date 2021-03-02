@@ -41,6 +41,10 @@ class SoloGaitEnvContact(BaseControlEnv):
     def step(self, action):
         self.past_gaits.append(np.int(action))
         return super().step(action)
+    
+    def reset(self):
+        self.past_gaits = deque([-1,-1,-1], maxlen=3) # get past 3 gaits
+        return super().reset()
 
     def set_new_gait(self, gait_num):
         #print('Timestep {}, Contact Seq: {} {}'.format(self.timestep, gait_name_dict[gait_num], gait_num))

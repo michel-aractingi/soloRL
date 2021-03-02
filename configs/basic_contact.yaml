@@ -1,4 +1,4 @@
-episode_length: 100
+episode_length: 50
 vel_switch: 1000
 mode: headless
 num_history_stack: 1
