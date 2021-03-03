@@ -9,7 +9,7 @@ feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
 Vmax = .7
 # External Forces
-mags = [0, 3, 5, 10]
+magnitudes = [3, 5, 8, 10]
 durations = [1000, 2000, 3000, 4000, 5000]
 def new_random_vel():
     mask = np.array([[1,0,0,0,0,0]])
@@ -174,6 +174,7 @@ class BaseControlEnv(gym.core.Env):
         return self.get_observation()
 
     def reset_vel_ref(self, vel):
+        #vel[0] = 0
         self.vel_ref = vel
         self.controller.v_ref = vel.reshape(-1,1)
 
@@ -294,6 +295,18 @@ class BaseControlEnv(gym.core.Env):
         return self.controller.planner.Cplanner.get_gait_des()
 
     def get_past_gait(self):
+        return self.controller.planner.Cplanner.get_gait_past()
+
+    @property
+    def gait_f(self):
+        return self.controller.planner.Cplanner.get_gait()
+
+    @property
+    def gait_f_des(self):
+        return self.controller.planner.Cplanner.get_gait_des()
+
+    @property
+    def gait_p(self):
         return self.controller.planner.Cplanner.get_gait_past()
 
     def get_base_vel(self):

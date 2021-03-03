@@ -26,14 +26,13 @@ if __name__=='__main__':
         config['task'] = args.task
 
     if args.env_name == 'base':
-        from soloRL.baseEnv import SoloBaseEnv
-        env_constructor = SoloBaseEnv
+        from soloRL.baseEnv import SoloBaseEnv as env_constructor
     elif args.env_name == 'gait':
-        from soloRL.soloGaitEnv import SoloGaitEnv
-        env_constructor = SoloGaitEnv
+        from soloRL.soloGaitEnv import SoloGaitEnv as env_constructor
     elif args.env_name == 'contact':
-        from soloRL.soloGaitEnvContact import SoloGaitEnvContact
-        env_constructor = SoloGaitEnvContact
+        from soloRL.soloGaitEnvContact import SoloGaitEnvContact as env_constructor
+    elif args.env_name == 'gaitperiod':
+        from soloRL.soloGaitPeriodEnv import SoloGaitPeriodEnv as env_constructor
 
     os.chdir(args.checkpoint_dir)
     """

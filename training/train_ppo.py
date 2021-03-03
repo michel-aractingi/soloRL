@@ -13,7 +13,7 @@ def get_ppo_args():
     parser.add_argument('--hidden-size', type=int, default=32)
     parser.add_argument('--no-cuda', action='store_true', default=False)
 
-    parser.add_argument('--env-name', choices=['base', 'gait', 'contact', 'mbgait'], default='base')
+    parser.add_argument('--env-name', type=str, default='base')
 
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--tau', type=float, default=0.95)
@@ -77,5 +77,9 @@ if __name__=='__main__':
         from soloRL.soloGaitEnvContact import SoloGaitEnvContact as env_constructor
     elif args.env_name == 'mbgait':
         from soloRL.soloGaitMBEnv import SoloGaitMBEnv as env_constructor
+    elif args.env_name == 'gaitperiod':
+        from soloRL.soloGaitPeriodEnv import SoloGaitPeriodEnv as env_constructor
+    else:
+        raise NotImplementedError('Error Env {} not found!'.format(args.env_name))
 
     ppo.train(args, config, env_constructor, writer)

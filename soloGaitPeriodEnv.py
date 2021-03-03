@@ -6,7 +6,8 @@ import pybullet as p
 from baseControlEnv import BaseControlEnv
 from collections import deque
 
-period_dict = {0: -1, 1: 0.24, 2: 0.32, 3: 0.40, 4:0.48}
+periods =  [0.16, 0.24, 0.32, 0.4, 0.48, 0.56, 0.64]
+period_dict = dict([(i,p) for i,p in enumerate(periods)])
 
 class SoloGaitPeriodEnv(BaseControlEnv):
     def __init__(self, config):
@@ -14,7 +15,7 @@ class SoloGaitPeriodEnv(BaseControlEnv):
         config['rl_dt'] = 0.32
         super(SoloGaitPeriodEnv, self).__init__(config)
         
-        self.num_actions = 4 
+        self.num_actions = len(periods) 
         self.action_space = gym.spaces.Discrete(self.num_actions) # No noop action
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
@@ -27,14 +28,18 @@ class SoloGaitPeriodEnv(BaseControlEnv):
 
     def reset(self):
         self.past_actions = deque(np.ones(4)*-1,maxlen=4)
-        self.current_period = self.T_gait
+        self.next_period = self.T_gait
         return super().reset()
 
     def set_new_gait(self, action):
-        period = period_dict[action + 1] # No  Noop Actions
+        #print(period_dict[action+1])
+        period = period_dict[action] # No  Noop Actions
         if period != self.next_period:
-            self.controller.planner.Cplanner.create_modtrot(period)
+            #self.controller.planner.Cplanner.create_modtrot(period) # late mod
             self.next_period = period
+            g,gf = self._update_gait_matrices()
+            self.controller.planner.Cplanner.set_gaits(g,gf)
+
         self.past_actions.append(self.next_period)
 
     def get_observation(self):
@@ -54,3 +59,71 @@ class SoloGaitPeriodEnv(BaseControlEnv):
         executed_gaits = self.get_past_gait()[:2].flatten()
 
         return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, history_periods, executed_gaits, self.vel_ref.flatten()])
+
+    def _update_gait_matrices(self):
+        period = self.next_period
+        gait_f = self.get_current_gait()
+        gait_p = self.get_past_gait()
+    
+        # half period MPC steps
+        period_steps = int(0.5 * (period /self.dt)/self.k_mpc)
+        default_steps = int(0.5 * (self.T_gait/self.dt) /self.k_mpc)
+        gait_steps = 2* default_steps
+
+        new_gait_f = np.zeros(gait_f.shape)
+        new_gait_f_des = np.zeros(gait_f.shape)
+
+        # If current sequence is still in progess,
+        # Start changing time from next sequence
+        # Else start changing time of current sequence
+        if np.array_equal(gait_f[0,1:], gait_p[0,1:]):
+            i_row = 1
+            remaining_steps = gait_steps - gait_f[0,0]
+            new_gait_f[0,:] = gait_f[0,:]
+        else:
+            i_row = 0
+            remaining_steps = gait_steps
+
+        s1 = gait_f[i_row,1:]
+        s2 = 1. - s1
+        #s2 = gait_f[i_row + 1,1:]
+
+        seqs = np.vstack((s1,s2))
+        i_seq = 0
+        remaining_f_steps = 0
+
+        while True:
+            if period_steps < remaining_steps:
+                new_gait_f[i_row, 0] = period_steps
+                new_gait_f[i_row, 1:] = seqs[i_seq]
+                remaining_steps -= period_steps
+            elif period_steps > remaining_steps:
+                new_gait_f[i_row, 0] = remaining_steps
+                new_gait_f[i_row, 1:] = seqs[i_seq]
+                remaining_f_steps = period_steps - remaining_steps 
+                break;
+            else:
+                new_gait_f[i_row, 0] = period_steps
+                new_gait_f[i_row, 1:] = seqs[i_seq]
+                remaining_f_steps = 0
+                break;
+            i_row += 1
+            i_seq = (i_seq + 1) % len(seqs)
+
+        # Fill gait_f_des
+        if remaining_f_steps!=0:
+            new_gait_f_des[0,0] = remaining_f_steps
+            new_gait_f_des[0,1:] = seqs[i_seq]
+            
+            new_gait_f_des[1,0] = period_steps
+            new_gait_f_des[1,1:] = seqs[(i_seq + 1) % len(seqs)]
+
+            new_gait_f_des[2,0] = period_steps - remaining_f_steps
+            new_gait_f_des[2,1:] = seqs[i_seq]
+        else:
+            new_gait_f_des[0:2,0] = [period_steps]*2
+            last_gait_f_row = new_gait_f[i_row, 1:]
+            new_gait_f_des[0,1:] = 1. - last_gait_f_row
+            new_gait_f_des[1,1:] = last_gait_f_row
+
+        return new_gait_f, new_gait_f_des
