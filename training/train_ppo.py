@@ -31,6 +31,7 @@ def get_ppo_args():
 
     parser.add_argument('--num-env-steps', type=int, default=1e6)
     parser.add_argument('--seed', type=int, default=2301)
+    parser.add_argument('--curriculum-schedule', type=int, default=0)
 
     parser.add_argument('--log-interval', type=int, default=10)
     parser.add_argument('--logdir', type=str, default=None)

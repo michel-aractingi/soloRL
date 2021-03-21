@@ -25,3 +25,32 @@ if __name__ == '__main__':
 
     env = SoloGaitPeriodEnv(config)
     import pudb; pudb.set_trace()
+
+
+
+#Test Base line actions
+"""
+actions =...
+runs = 3
+e_trqs = np.zeros((runs,len(actions), 10))
+e_vels = np.zeros((runs,len(actions), 10))
+
+for j in range(runs):
+    trqs = e_trqs[j]
+    vels = e_vels[j]
+    for ai, a in enumerate(actions):
+        env.reset()
+        ref_vel = np.zeros(6)
+        env.reset_vel_ref(ref_vel)
+        print('current_action ', a)
+        for i in range(0,10):
+            for t in range(20):
+                _,_,done,infos = env.step(ai)
+            print('step ', i)
+            trqs[ai, i] = infos['dr/Torque_pen']/20 * int(not done)
+            vels[ai,i] = infos['dr/body_velocity']/20 * int(not done)
+            env.reset()
+            ref_vel[0] += .1
+            env.reset_vel_ref(ref_vel)
+"""
+

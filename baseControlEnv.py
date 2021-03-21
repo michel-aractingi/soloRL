@@ -5,15 +5,24 @@ import numpy as np
 import pybullet as p
 from scripts import Controller, PyBulletSimulator
 
-feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 
+"""
+Constants
+"""
+coulomb_tau = 0.0477
+viscous_b = 0.000135
+K_motor = 4.81
+feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
+"""
+-------------------------------------------------------------
+"""
 Vmax = .7
 # External Forces
 magnitudes = [3, 5, 8, 10]
 durations = [1000, 2000, 3000, 4000, 5000]
-def new_random_vel():
-    mask = np.array([[1,0,0,0,0,0]])
-    vel = (np.random.random((6,1)) - 0.5 ) * 2 * Vmax
+def new_random_vel(max_val=Vmax):
+    mask = np.array([[1,1,0,0,0,1]])
+    vel = (np.random.random((6,1)) - 0.5 ) * 2 * max_val
     vel *= mask.T
     return vel
 
@@ -36,9 +45,7 @@ class BaseControlEnv(gym.core.Env):
 
         self.solo12 = config.get('solo12', True)
         self.episode_length = config.get('episode_length', 100)
-        self.vel_switch = config.get('vel_switch', 30)
         self.use_flat_ground = config.get('flat_ground', True)
-        self.auto_vel_switch = config.get('auto_vel_switch', True)
         self.add_external_force = config.get('add_external_force', False)
 
 
@@ -46,6 +53,8 @@ class BaseControlEnv(gym.core.Env):
 
         self.rl_dt = config.get('rl_dt', self.T_gait)
         self.k_rl = int(self.rl_dt/self.dt)
+
+        self.N_SIMULATION = 50000#int(self.k_rl * self.episode_length)
 
         self.controller = \
             Controller(q_init=self.q_init, 
@@ -57,7 +66,7 @@ class BaseControlEnv(gym.core.Env):
                        t=0,
                        T_gait=self.T_gait,
                        T_mpc=self.T_mpc,
-                       N_SIMULATION=50000,
+                       N_SIMULATION=self.N_SIMULATION,
                        type_MPC=True,
                        pyb_feedback=True, 
                        on_solo8= not self.solo12,
@@ -82,8 +91,11 @@ class BaseControlEnv(gym.core.Env):
         self.observation_space = None
 
         self.continuous_time = 0.0 
-        self.discrete_time = 0.0
-        
+        self.discrete_time = 0.0        
+        self.auto_vel_switch = config.get('auto_vel_switch', True) 
+        self.vel_switch = config.get('vel_switch', 30)#* self.k_rl
+        self.use_curriculum = config.get('use_curriculum', False)
+        self.max_velocity = 0.0 if self.use_curriculum else Vmax
 
         self._reset = True
         self._hard_reset = False
@@ -93,6 +105,15 @@ class BaseControlEnv(gym.core.Env):
         self._info = {}
         self._info['episode_length'] = 0
         self._info['episode_reward'] = 0
+
+        if config.get('use_logging', False):
+            from soloRL.logger import Logger
+            self.logger = Logger(self.episode_length * self.k_rl)
+            self.vel_list = None #np.load('/home/soloRL/misc/vel_plan1.npy')
+            self.vel_itr = 0
+        else:
+            self.logger = None
+            self.vel_list = None
 
     def step(self, action):
         assert not self._reset, "env.reset() must be called before step"
@@ -116,6 +137,8 @@ class BaseControlEnv(gym.core.Env):
             torque_pen += np.square(self.robot.tau_ff).sum()
             base_vel = self.get_base_vel().flatten()
             vel_pen += np.square(self.vel_ref.flatten() - base_vel).sum()
+            if self.logger is not None:
+                self.log_stats()
             if done:
                 break;
 
@@ -134,15 +157,14 @@ class BaseControlEnv(gym.core.Env):
 
         self._info['episode_length'] += 1
         self._info['episode_reward'] += reward
+        self._info['max_velocity'] = self.max_velocity
         self._info = {**self._info, **info}
         self._info['success'] = info['timeout'] and done
 
         self._info['dr/Torque_pen'] += torque_pen/self.k_rl
         self._info['dr/body_velocity'] += vel_pen/self.k_rl
 
-        # Change velocity command every N steps
-        if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
-            self.reset_vel_ref(new_random_vel())
+        self.switch_velocities()
 
         return state, reward, done, self._info.copy()
 
@@ -154,7 +176,12 @@ class BaseControlEnv(gym.core.Env):
             self.controller.reset()
             self.robot.reset()
         if self.auto_vel_switch: 
-            self.reset_vel_ref(new_random_vel())
+            if self.vel_list is not None:
+                vel = self.vel_list[0]
+                self.vel_itr = 1
+            else:
+                vel = new_random_vel(self.max_velocity)
+            self.reset_vel_ref(vel)
         else:
             self.vel_ref = self.controller.joystick.v_ref
 
@@ -170,11 +197,14 @@ class BaseControlEnv(gym.core.Env):
         self._info['episode_reward'] = 0
         self._info['dr/Torque_pen'] = 0
         self._info['dr/body_velocity'] = 0
+        self._info['max_velocity'] = self.max_velocity
+
+        if self.logger is not None:
+            self.logger.reset()
         
         return self.get_observation()
 
     def reset_vel_ref(self, vel):
-        #vel[0] = 0
         self.vel_ref = vel
         self.controller.v_ref = vel.reshape(-1,1)
 
@@ -213,6 +243,55 @@ class BaseControlEnv(gym.core.Env):
     def set_new_gait(self, gait_num):
         raise NotImplementedError
 
+
+    def create_force_function(self):
+        if not self.add_external_force:
+            self._apply_force = lambda k: None
+        else:
+            M = np.zeros((3,))
+            F = np.zeros((3,))
+            F[random.choices([0,1,2])] = random.choices(magnitudes)
+            sign = random.choices([-1,1])[0]
+            F *= np.array([sign, sign, 1.])
+            start_itr = random.randint(500, int(self.k_rl * self.episode_length *(2/3)))
+            duration = random.choice(durations)
+            print('apply force with magniture {} starting at iteration {} for a duration of {} steps'.format(F,start_itr, duration))
+            self._apply_force = lambda k: self.robot.pyb_sim.apply_external_force(k, start_itr, duration, F, M)
+
+    def log_stats(self):
+        if self.logger is None:
+            return
+        #Basic Observation
+        self.robot.UpdateMeasurment()
+        
+        base_xyz = self.robot.baseState[0]
+        base_rpy = p.getEulerFromQuaternion(self.robot.baseOrientation)
+
+        joints_power = self.get_joints_power()
+
+        self.logger.log(self.controller.k, 
+                        self.get_base_vel().flatten(),
+                        self.vel_ref.flatten(), 
+                        self.robot.tau_ff, 
+                        joints_power,
+                        base_xyz, base_rpy)
+
+    def switch_velocities(self):
+        if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
+            if self.vel_list is not None:
+                vel = self.vel_list[self.vel_itr]
+                self.vel_itr = (self.vel_itr + 1) % self.vel_list.shape[0]
+            else: 
+                vel = new_random_vel(self.max_velocity)
+            self.reset_vel_ref(vel)
+        else:
+            return
+
+    def increment_curriculum(self, val=0.1):
+        if not self.use_curriculum:
+            return
+        self.max_velocity = np.clip(self.max_velocity + val, 0.0, Vmax)
+
     def reset_hard(self):
         del self.controller, self.robot
         self.controller = \
@@ -245,10 +324,12 @@ class BaseControlEnv(gym.core.Env):
     def get_observation(self):
         #Basic Observation
         self.robot.UpdateMeasurment()
-        qu = np.array([self.robot.baseState[0],
-            p.getEulerFromQuaternion(self.robot.baseOrientation)]).flatten()[2:]
+        
+        base_xyz = self.robot.baseState[0]
+        base_rpy = p.getEulerFromQuaternion(self.robot.baseOrientation)
+        qu = np.array([base_xyz, base_rpy]).flatten()[2:]
 
-        qu_dot = np.array(self.get_base_vel()).flatten()
+        qu_dot = self.get_base_vel().flatten()
         qa = self.robot.q_mes
         qa_dot = self.robot.v_mes
 
@@ -257,7 +338,6 @@ class BaseControlEnv(gym.core.Env):
         executed_gait = self.get_past_gait()[:2].flatten()
 
         history = ...
-
         return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, executed_gait, self.vel_ref.flatten()])
 
 
@@ -297,6 +377,32 @@ class BaseControlEnv(gym.core.Env):
     def get_past_gait(self):
         return self.controller.planner.Cplanner.get_gait_past()
 
+    def get_joints_power(self):
+        """
+        P = P_t + P_f
+        P_f: power loss due to friction, tau_f * qa_dot
+        P_t: power due to torques, K * tau**2
+        ------------------------------------------
+        tau_f: friction torque, tau_c * sign(qa_dot) + b * qa_dot
+        tau_c: columb friction 
+        b: viscous friction
+        K: scale motor resistance
+        These constant values are provided by the lab
+        """
+        qa_dot = self.robot.v_mes
+        tau_cmd = self.robot.tau_ff
+
+        P_f = coulomb_tau * np.sign(qa_dot) + viscous_b * qa_dot
+        P_t = K_motor * tau_cmd**2
+
+        return P_f + P_t
+
+    def get_base_vel(self):
+        '''
+        return the base linear and angular velocities in the body frame
+        '''
+        return np.concatenate((self.robot.b_baseVel, self.robot.baseAngularVelocity)).reshape((-1,1))
+
     @property
     def gait_f(self):
         return self.controller.planner.Cplanner.get_gait()
@@ -309,34 +415,16 @@ class BaseControlEnv(gym.core.Env):
     def gait_p(self):
         return self.controller.planner.Cplanner.get_gait_past()
 
-    def get_base_vel(self):
-        '''
-        return the base linear and angular velocities in the body frame
-        '''
-        return np.concatenate((self.robot.b_baseVel, self.robot.baseAngularVelocity)).reshape((-1,1))
-
-    def create_force_function(self):
-        if not self.add_external_force:
-            self._apply_force = lambda k: None
-        else:
-            M = np.zeros((3,))
-            F = np.zeros((3,))
-            F[random.choices([0,1,2])] = random.choices(magnitudes)
-            sign = random.choices([-1,1])[0]
-            F *= np.array([sign, sign, 1.])
-            start_itr = random.randint(500, int(self.k_rl * self.episode_length *(2/3)))
-            duration = random.choice(durations)
-            print('apply force with magniture {} starting at iteration {} for a duration of {} steps'.format(F,start_itr, duration))
-            self._apply_force = lambda k: self.robot.pyb_sim.apply_external_force(k, start_itr, duration, F, M)
-
-
     def test_validity(self):
         self.reset()
+        rs = []
         for i in range(100):
             a = random.randint(0,self.num_actions-1)
             o,r,d,i = self.step(a)
+            rs.append(r)
             if d:
-                print(r)
+                print(sum(rs)/len(rs))
+                rs = []
                 self.reset()
 
 

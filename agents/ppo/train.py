@@ -60,6 +60,7 @@ def train(args, config, env_constructor, writer=None):
     episode_rewards = deque(maxlen=32)
     episode_length = deque(maxlen=32)
     episode_success = deque(maxlen=32)
+    max_vel = 0.0
     episode_rewards_dict = defaultdict(lambda: deque(maxlen=32))
 
     start = time.time()
@@ -84,6 +85,7 @@ def train(args, config, env_constructor, writer=None):
                     episode_rewards.append(info['episode_reward'])
                     episode_length.append(info['episode_length'])
                     episode_success.append(info['success'])
+                    max_vel = max(max_vel, info['max_velocity'])
                     for k in info.keys():
                         if 'dr/' in k.lower():
                             episode_rewards_dict[k].append(info[k])
@@ -100,6 +102,10 @@ def train(args, config, env_constructor, writer=None):
         value_loss, action_loss, dist_entropy = agent.update(ep_buffer)
 
         ep_buffer.reset()
+
+        # Increment linear curriculum schedule 
+        if args.curriculum_schedule and (j + 1) % args.curriculum_schedule == 0:
+            envs.increment_curriculum()
 
         total_num_steps = (j + 1) * args.num_agents * args.num_steps
         # save for every interval-th episode or for the last epoch
@@ -133,6 +139,7 @@ def train(args, config, env_constructor, writer=None):
                 utils.log(writer, episode_rewards, 'Episode/reward', total_num_steps)
                 utils.log(writer, episode_success, 'Episode/success_mean', total_num_steps)
                 utils.log(writer, episode_length, 'Episode/length', total_num_steps)
+                utils.log(writer, max_vel, 'Curriculum/max_vel', total_num_steps)
                 utils.log(writer, episode_rewards_dict, '', total_num_steps)
 
 

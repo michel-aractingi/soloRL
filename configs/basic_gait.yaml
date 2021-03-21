@@ -1,8 +1,13 @@
 episode_length: 50
-vel_switch: 1000
+vel_switch: 500
 mode: headless
 num_history_stack: 1
 flat_ground: True
 auto_vel_switch: True
 solo12: True
-dd_external_force: False
+add_external_force: False
+semi_mdp: True
+reactive_update: True
+num_actions: 7
+use_logging: False
+use_curriculum: True

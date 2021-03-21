@@ -6,8 +6,8 @@ import pybullet as p
 from baseControlEnv import BaseControlEnv
 from collections import deque
 
-periods =  [0.16, 0.24, 0.32, 0.4, 0.48, 0.56, 0.64]
-period_dict = dict([(i,p) for i,p in enumerate(periods)])
+periods7 =  [0.16, 0.24, 0.32, 0.4, 0.48, 0.56, 0.64]
+periods4 =  [0.24, 0.32, 0.4, 0.48]
 
 class SoloGaitPeriodEnv(BaseControlEnv):
     def __init__(self, config):
@@ -15,8 +15,11 @@ class SoloGaitPeriodEnv(BaseControlEnv):
         config['rl_dt'] = 0.32
         super(SoloGaitPeriodEnv, self).__init__(config)
         
-        self.num_actions = len(periods) 
+        self.num_actions = config.get('num_actions', 4)
         self.action_space = gym.spaces.Discrete(self.num_actions) # No noop action
+
+        self.semi_mdp = config.get('semi_mdp', False)
+        self.reactive_update = config.get('reactive_update', False)
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
         # 12 rel foot pose, 6 vel_ref, 4 past gait seq = 62
@@ -26,19 +29,32 @@ class SoloGaitPeriodEnv(BaseControlEnv):
         self.next_period = self.T_gait
         self.past_actions = deque(np.ones(4)*self.next_period,maxlen=4)
 
+        if self.num_actions == 4:
+            ps = periods4
+        elif self.num_actions == 7:
+            ps = periods7
+        else:
+            raise NotImplementedError('Invalid number of actions')
+        self.period_dict = dict([(i,p) for i,p in enumerate(ps)])
+
     def reset(self):
         self.past_actions = deque(np.ones(4)*-1,maxlen=4)
         self.next_period = self.T_gait
+        self.k_rl = int(self.rl_dt/self.dt)
         return super().reset()
 
     def set_new_gait(self, action):
-        #print(period_dict[action+1])
-        period = period_dict[action] # No  Noop Actions
+        #print(self.period_dict[action])
+        period = self.period_dict[action] # No  Noop Actions
         if period != self.next_period:
-            #self.controller.planner.Cplanner.create_modtrot(period) # late mod
             self.next_period = period
-            g,gf = self._update_gait_matrices()
-            self.controller.planner.Cplanner.set_gaits(g,gf)
+            if self.reactive_update: # update gait_f
+                g,gf = self._update_gait_matrices()
+                self.controller.planner.Cplanner.set_gaits(g,gf)
+                if self.semi_mdp:
+                    self.k_rl = int(period/self.dt)
+            else: # update future_gait_des
+                self.controller.planner.Cplanner.create_modtrot(period)
 
         self.past_actions.append(self.next_period)
 

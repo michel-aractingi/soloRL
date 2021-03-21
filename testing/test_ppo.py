@@ -8,6 +8,15 @@ import time
 
 import re, glob
 
+def str2bool(x):
+    if x is None: return
+    if x.lower() in ('false','f','n','0'):
+        return False
+    elif x.lower() in ('true','t','y','1'):
+        return True
+    else:
+        raise NotImplementedError
+
 if __name__=='__main__':
     parser = argparse.ArgumentParser([])
     parser.add_argument('--checkpoint-dir', type=str, default=None)
@@ -17,11 +26,18 @@ if __name__=='__main__':
     parser.add_argument('--task', type=str, default=None)
     parser.add_argument('--num-runs', type=int, default=10)
     parser.add_argument('--store-action-histogram', action='store_true', default=False)
+    parser.add_argument('--linear-velocity', action='store_true', default=False)
+    parser.add_argument('--episode-length', type=int, default=None)
+    parser.add_argument('--vel-switch', type=int, default=None)
+    parser.add_argument('--reactive-update', type=str2bool, default=None)
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     config['mode'] = args.mode
+    if args.episode_length is not None: config['episode_length'] = args.episode_length
+    if args.vel_switch is not None: config['vel_switch'] = args.vel_switch
+    if args.reactive_update is not None: config['reactive_update'] = args.reactive_update
     if args.task is not None:
         config['task'] = args.task
 
@@ -57,11 +73,22 @@ if __name__=='__main__':
     if args.store_action_histogram:
         a_hist = [0 for _ in range(env.action_space.n)]
         
+    if args.linear_velocity:
+        import numpy as np
+        vel = np.zeros((1,6))
     ep_len = []
     ep_success = []
     ep_R = []
     obs = env.reset()
+    if args.linear_velocity:
+        vel = np.zeros((1,6))
+        env.envs.venv.reset_vel(vel)
+        cumm_trq = 0
+        cumm_vel = 0
+        trqs = []
+        vels = []
     episode = 0
+
     while episode < args.num_runs:
         with torch.no_grad():
             _, action, _ = policy.act(obs, deterministic=True)
@@ -71,14 +98,27 @@ if __name__=='__main__':
         if args.store_action_histogram:
             a_hist[int(action.item())] += 1
         
+        if args.linear_velocity and infos['episode_length'] % 20==0:
+            vels.append((infos['dr/body_velocity'] - cumm_vel)/20)
+            trqs.append((infos['dr/Torque_pen'] - cumm_trq)/20)
+            cumm_vel = infos['dr/body_velocity']
+            cumm_trq = infos['dr/Torque_pen']  
+
+            vel[0][-1] += 0.1
+            env.envs.venv.reset_vel(vel)
+            ##if vel[0][0] > 1.:
+                #break;
+
         if done:
-            ep_len.append(infos[0]['episode_length'])
-            ep_R.append(infos[0]['episode_reward'])
-            ep_success.append(infos[0]['success'])
-            print(episode)
+            import pudb; pudb.set_trace()
+            print(episode, infos['episode_length'])
             episode += 1
+            obs = env.reset()
+            ep_len.append(infos['episode_length'])
+            ep_R.append(infos['episode_reward'])
+            ep_success.append(infos['success'])
     print('mean length {} mean reward {} mean success {}'.format(sum(ep_len)/args.num_runs,sum(ep_R)/args.num_runs, sum(ep_success)/args.num_runs))
     if args.store_action_histogram:
         print(a_hist)
-    #import pudb; pudb.set_trace()
+    import pudb; pudb.set_trace()
     import sys; sys.exit()
