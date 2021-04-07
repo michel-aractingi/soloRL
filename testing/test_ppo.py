@@ -6,6 +6,8 @@ from soloRL.agents.ppo.policy import Policy
 from soloRL.agents.ppo.envs import make_vec_envs
 import time
 
+import numpy as np
+
 import re, glob
 
 def str2bool(x):
@@ -74,7 +76,6 @@ if __name__=='__main__':
         a_hist = [0 for _ in range(env.action_space.n)]
         
     if args.linear_velocity:
-        import numpy as np
         vel = np.zeros((1,6))
     ep_len = []
     ep_success = []
@@ -83,33 +84,37 @@ if __name__=='__main__':
     if args.linear_velocity:
         vel = np.zeros((1,6))
         env.envs.venv.reset_vel(vel)
-        cumm_trq = 0
-        cumm_vel = 0
-        trqs = []
-        vels = []
+    trqs = []
+    vels = []
     episode = 0
+    energy = []
 
     while episode < args.num_runs:
         with torch.no_grad():
             _, action, _ = policy.act(obs, deterministic=True)
 
+        #action[0][0] = 0
         obs, reward, done, infos = env.step(action)
 
         if args.store_action_histogram:
             a_hist[int(action.item())] += 1
-        
-        if args.linear_velocity and infos['episode_length'] % 20==0:
-            vels.append((infos['dr/body_velocity'] - cumm_vel)/20)
-            trqs.append((infos['dr/Torque_pen'] - cumm_trq)/20)
-            cumm_vel = infos['dr/body_velocity']
-            cumm_trq = infos['dr/Torque_pen']  
 
-            vel[0][-1] += 0.1
-            env.envs.venv.reset_vel(vel)
-            ##if vel[0][0] > 1.:
-                #break;
+        if infos['episode_length'] % 20==0:
+            vels.append(infos['dr/body_velocity'])
+            trqs.append(infos['dr/Torque_pen'])
+            energy.append(infos['dr/Energy_pen'])
+            if args.linear_velocity:
+                vel[0][0] += 0.1
+                env.envs.venv.reset_vel(vel)
 
         if done:
+            for i in reversed(range(1,len(energy))):
+                energy[i] = energy[i] - energy[i-1]
+                vels[i] = vels[i] - vels[i-1]
+                trqs[i] = trqs[i] - trqs[i-1]
+            energy = np.array(energy)/20
+            vels = np.array(vels)/20
+            trqs = np.array(trqs)/20
             import pudb; pudb.set_trace()
             print(episode, infos['episode_length'])
             episode += 1

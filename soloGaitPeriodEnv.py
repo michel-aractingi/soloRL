@@ -7,6 +7,7 @@ from baseControlEnv import BaseControlEnv
 from collections import deque
 
 periods7 =  [0.16, 0.24, 0.32, 0.4, 0.48, 0.56, 0.64]
+periods5 =  [0.24, 0.32, 0.4, 0.48, 0.56]
 periods4 =  [0.24, 0.32, 0.4, 0.48]
 
 class SoloGaitPeriodEnv(BaseControlEnv):
@@ -23,7 +24,7 @@ class SoloGaitPeriodEnv(BaseControlEnv):
 
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
         # 12 rel foot pose, 6 vel_ref, 4 past gait seq = 62
-        high = np.inf * np.ones([66])       
+        high = np.inf * np.ones([62])       
         self.observation_space = gym.spaces.Box(-high, high)
 
         self.next_period = self.T_gait
@@ -31,6 +32,8 @@ class SoloGaitPeriodEnv(BaseControlEnv):
 
         if self.num_actions == 4:
             ps = periods4
+        elif self.num_actions == 5:
+            ps = periods5
         elif self.num_actions == 7:
             ps = periods7
         else:
@@ -38,8 +41,8 @@ class SoloGaitPeriodEnv(BaseControlEnv):
         self.period_dict = dict([(i,p) for i,p in enumerate(ps)])
 
     def reset(self):
-        self.past_actions = deque(np.ones(4)*-1,maxlen=4)
         self.next_period = self.T_gait
+        self.past_actions = deque(np.ones(4)*self.next_period,maxlen=4)
         self.k_rl = int(self.rl_dt/self.dt)
         return super().reset()
 
@@ -56,6 +59,7 @@ class SoloGaitPeriodEnv(BaseControlEnv):
             else: # update future_gait_des
                 self.controller.planner.Cplanner.create_modtrot(period)
 
+        self._last_action = self.next_period
         self.past_actions.append(self.next_period)
 
     def get_observation(self):
@@ -72,9 +76,11 @@ class SoloGaitPeriodEnv(BaseControlEnv):
     
         history_periods = np.array(self.past_actions) 
 
-        executed_gaits = self.get_past_gait()[:2].flatten()
+        #executed_gaits = self.get_past_gait()[:2].flatten()
+        
+        command_history = np.stack(self.past_commands).flatten()
 
-        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, history_periods, executed_gaits, self.vel_ref.flatten()])
+        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, history_periods, command_history])
 
     def _update_gait_matrices(self):
         period = self.next_period

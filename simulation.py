@@ -42,60 +42,6 @@ class SimulatedScene:
         # comment out for now due to speed
         #self.ground_heightfield.update_randomly()
 
-class Heightfield:
-    loaded=False
-    def __init__(self, maxheight, maxrows=512, maxcols=512):
-        self.maxheight = maxheight
-        self.maxrows = maxrows
-        self.maxcols = maxcols
-    def load(self):
-        if self.loaded:
-            return
-
-        p.setAdditionalSearchPath(pd.getDataPath())
-        textureId = -1
-        self.heightfieldData = [0] * self.maxrows * self.maxcols 
-
-        for j in range (int(self.maxcols/2)):
-          for i in range (int(self.maxrows/2)):
-            height = np.random.uniform(0,self.maxheight)
-            self.heightfieldData[2*i+2*j*self.maxrows]=height
-            self.heightfieldData[2*i+1+2*j*self.maxrows]=height
-            self.heightfieldData[2*i+(2*j+1)*self.maxrows]=height
-            self.heightfieldData[2*i+1+(2*j+1)*self.maxrows]=height
-              
-              
-        self.terrain_id = p.createCollisionShape(shapeType=p.GEOM_HEIGHTFIELD, 
-                                                 meshScale=[.05,.05,1], 
-                                                 heightfieldTextureScaling=(self.maxrows-1)/2, 
-                                                 heightfieldData=self.heightfieldData, 
-                                                 numHeightfieldRows=self.maxrows, 
-                                                 numHeightfieldColumns=self.maxcols)
-
-        terrain  = p.createMultiBody(0, self.terrain_id)
-        p.resetBasePositionAndOrientation(terrain,[0,0,0], [0,0,0,1])
-        p.changeVisualShape(terrain, -1, rgbaColor=[.76,.69,0.50,1])
-        self.loaded = True
-
-    def update_randomly(self):
-        assert self.loaded
-        for j in range (int(self.maxcols/2)):
-            for i in range (int(self.maxrows/2)):
-                height = np.random.uniform(0,self.maxheight)
-                self.heightfieldData[2*i+2*j*self.maxrows]=height
-                self.heightfieldData[2*i+1+2*j*self.maxrows]=height
-                self.heightfieldData[2*i+(2*j+1)*self.maxrows]=height
-                self.heightfieldData[2*i+1+(2*j+1)*self.maxrows]=height
-            
-        self.terrain_id = p.createCollisionShape(shapeType=p.GEOM_HEIGHTFIELD, 
-                                                 meshScale=[.05,.05,1], 
-                                                 heightfieldTextureScaling=(self.maxrows-1)/2, 
-                                                 heightfieldData=self.heightfieldData, 
-                                                 numHeightfieldRows=self.maxrows,
-                                                 numHeightfieldColumns=self.maxcols,
-                                                 replaceHeightfieldIndex = self.terrain_id)
-
-
 class Treadmill:
     loaded=False
     def __init__(self, base_vel=None, length=50, max_vel=2):
@@ -129,4 +75,81 @@ class Treadmill:
         if randomize_vel:
             self.base_vel = self.random_vel()
             p.resetBaseVelocity(self.body_id, [self.base_vel, 0, 0])
+
+class Generalfield:
+    loaded=False
+    def __init__(self, stepwidth, maxheight, maxrows=512, maxcols=512):
+        '''
+        stepwidth between 10,50
+        stepheight around 0.0.5,0.1,0.2
+        '''
+        self.maxheight = maxheight
+        self.maxrows = maxrows
+        self.maxcols = maxcols
+        self.stepwidth = stepwidth
+        self.heightfieldData = np.zeros((self.maxrows, self.maxcols))
+
+    def load(self):
+        if self.loaded:
+            return
+
+        self.generate_heightfield()
+        self.terrain_id = p.createCollisionShape(shapeType=p.GEOM_HEIGHTFIELD, 
+                                                 meshScale=[.05,.05,1], 
+                                                 heightfieldTextureScaling=(self.maxrows-1)/2, 
+                                                 heightfieldData=self.heightfieldData.flatten(), 
+                                                 numHeightfieldRows=self.maxrows,
+                                                 numHeightfieldColumns=self.maxcols)
+
+        terrain  = p.createMultiBody(0, self.terrain_id)
+        p.resetBasePositionAndOrientation(terrain,[0,0,0], [0,0,0,1])
+        p.setAdditionalSearchPath(pd.getDataPath())
+        textureid = p.loadTexture("heightmaps/ground0.txt")
+
+        p.changeVisualShape(terrain, -1, 
+                            rgbaColor=[0.44705882, 0.51764706, 0.53333333,1],
+                            textureUniqueId = textureid)
+        self.loaded = True
+
+    def update(self):
+        assert self.loaded
+        self.generate_heightfield()
+        self.terrain_id = p.createCollisionShape(shapeType=p.GEOM_HEIGHTFIELD, 
+                                                 meshScale=[.05,.05,1], 
+                                                 heightfieldTextureScaling=(self.maxrows-1)/2, 
+                                                 heightfieldData=self.heightfieldData.flatten(), 
+                                                 numHeightfieldRows=self.maxrows,
+                                                 numHeightfieldColumns=self.maxcols,
+                                                 replaceHeightfieldIndex = self.terrain_id)
+
+    def generate_heightfield(self):
+        raise NotImplementedError
+
+class Heightfield(Generalfield):
+    def generate_heightfield(self):
+        for j in range (int(self.maxcols/2)):
+          for i in range (int(self.maxrows/2)):
+            height = np.random.uniform(0,self.maxheight)
+            self.heightfieldData[2*i+2*j*self.maxrows]=height
+            self.heightfieldData[2*i+1+2*j*self.maxrows]=height
+            self.heightfieldData[2*i+(2*j+1)*self.maxrows]=height
+            self.heightfieldData[2*i+1+(2*j+1)*self.maxrows]=height
+
+class Tiltedfield(Generalfield):
+    def generate_heightfield(self):
+        for i in range(int(self.maxrows)):
+            self.heightfieldData[i] = i
+        self.heightfieldData = (self.heightfieldData / self.maxrows) * self.maxheight
+
+class Stairsfield(Generalfield):
+    def generate_heightfield(self):
+        for i in np.arange(0,self.maxcols,self.stepwidth):
+            self.heightfieldData[i:i+self.stepwidth] = (i / self.stepwidth) * self.maxheight
+        return 
+
+class Stepfield(Generalfield):
+    def generate_heightfield(self):
+        for i in np.arange(0,self.maxcols,self.stepwidth):
+            for j in np.arange(0,self.maxrows, self.stepwidth):
+                self.heightfieldData[i:i+self.stepwidth, j:j+self.stepwidth] = np.random.uniform(0,self.maxheight)
 

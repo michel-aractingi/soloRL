@@ -3,6 +3,7 @@ import gym
 import random
 import numpy as np
 import pybullet as p
+from collections import deque
 from scripts import Controller, PyBulletSimulator
 
 
@@ -21,7 +22,7 @@ Vmax = .7
 magnitudes = [3, 5, 8, 10]
 durations = [1000, 2000, 3000, 4000, 5000]
 def new_random_vel(max_val=Vmax):
-    mask = np.array([[1,1,0,0,0,1]])
+    mask = np.array([[1,0,0,0,0,1]])
     vel = (np.random.random((6,1)) - 0.5 ) * 2 * max_val
     vel *= mask.T
     return vel
@@ -54,7 +55,7 @@ class BaseControlEnv(gym.core.Env):
         self.rl_dt = config.get('rl_dt', self.T_gait)
         self.k_rl = int(self.rl_dt/self.dt)
 
-        self.N_SIMULATION = 50000#int(self.k_rl * self.episode_length)
+        self.N_SIMULATION = int(0.64//self.dt * self.episode_length)
 
         self.controller = \
             Controller(q_init=self.q_init, 
@@ -105,11 +106,13 @@ class BaseControlEnv(gym.core.Env):
         self._info = {}
         self._info['episode_length'] = 0
         self._info['episode_reward'] = 0
+        self._last_action = None
+        self.past_commands = deque([np.zeros(3)]*4,maxlen=4)
 
         if config.get('use_logging', False):
             from soloRL.logger import Logger
-            self.logger = Logger(self.episode_length * self.k_rl)
-            self.vel_list = None #np.load('/home/soloRL/misc/vel_plan1.npy')
+            self.logger = Logger(self.N_SIMULATION)
+            self.vel_list = np.load('/home/soloRL/misc/vel_plan3.npy')
             self.vel_itr = 0
         else:
             self.logger = None
@@ -119,6 +122,8 @@ class BaseControlEnv(gym.core.Env):
         assert not self._reset, "env.reset() must be called before step"
         #assert action < self.num_actions
 
+        self._last_action = action
+
         self.continuous_time += self.dt
         self.discrete_time += 1
         self.timestep += 1
@@ -126,7 +131,7 @@ class BaseControlEnv(gym.core.Env):
         self.robot.UpdateMeasurment()
 
         done, info = self.get_termination()
-        torque_pen = 0; vel_pen = 0;
+        torque_pen = 0; vel_pen = 0; joints_power = np.zeros(12)
         for _ in range(self.k_rl):
             self._apply_force(self.controller.k) # If noise is added
             self.controller_step()
@@ -137,14 +142,20 @@ class BaseControlEnv(gym.core.Env):
             torque_pen += np.square(self.robot.tau_ff).sum()
             base_vel = self.get_base_vel().flatten()
             vel_pen += np.square(self.vel_ref.flatten() - base_vel).sum()
+            joints_power += self.get_joints_power()
             if self.logger is not None:
                 self.log_stats()
             if done:
                 break;
 
 
+        self.switch_velocities()
+        self.past_commands.append(self.vel_ref[[0,1,-1]])
+
         state = self.get_observation()
-        reward = 1 - (1./self.k_rl) * (0.005*torque_pen + vel_pen)
+        #reward = 1 - (1./self.k_rl) * (0.01*torque_pen + vel_pen)
+        energy_pen = joints_power.sum() * self.dt 
+        reward = 1 - (1./self.k_rl) * (5* energy_pen +  vel_pen)
         if info['nan'] or np.isnan(np.sum(state)):
             state = np.zeros(self.observation_space.shape)
             reward = 0.0
@@ -163,8 +174,7 @@ class BaseControlEnv(gym.core.Env):
 
         self._info['dr/Torque_pen'] += torque_pen/self.k_rl
         self._info['dr/body_velocity'] += vel_pen/self.k_rl
-
-        self.switch_velocities()
+        self._info['dr/Energy_pen'] += energy_pen/self.k_rl
 
         return state, reward, done, self._info.copy()
 
@@ -185,6 +195,8 @@ class BaseControlEnv(gym.core.Env):
         else:
             self.vel_ref = self.controller.joystick.v_ref
 
+        self.past_commands = deque([np.zeros(3)]*4,maxlen=4)
+        self.past_commands.append(self.vel_ref[[0,1,-1]])
         self.create_force_function()
 
         self._reset = False
@@ -197,7 +209,9 @@ class BaseControlEnv(gym.core.Env):
         self._info['episode_reward'] = 0
         self._info['dr/Torque_pen'] = 0
         self._info['dr/body_velocity'] = 0
+        self._info['dr/Energy_pen'] = 0
         self._info['max_velocity'] = self.max_velocity
+        self._last_action = None
 
         if self.logger is not None:
             self.logger.reset()
@@ -274,7 +288,7 @@ class BaseControlEnv(gym.core.Env):
                         self.vel_ref.flatten(), 
                         self.robot.tau_ff, 
                         joints_power,
-                        base_xyz, base_rpy)
+                        base_xyz, base_rpy, self._last_action)
 
     def switch_velocities(self):
         if self.auto_vel_switch and self.timestep % self.vel_switch == 0: 
@@ -392,7 +406,9 @@ class BaseControlEnv(gym.core.Env):
         qa_dot = self.robot.v_mes
         tau_cmd = self.robot.tau_ff
 
-        P_f = coulomb_tau * np.sign(qa_dot) + viscous_b * qa_dot
+        tau_friction = coulomb_tau * np.sign(qa_dot) + viscous_b * qa_dot
+
+        P_f = tau_friction * qa_dot 
         P_t = K_motor * tau_cmd**2
 
         return P_f + P_t

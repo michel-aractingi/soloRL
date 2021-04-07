@@ -9,5 +9,5 @@ add_external_force: False
 semi_mdp: True
 reactive_update: True
 num_actions: 7
-use_logging: False
-use_curriculum: True
+use_logging: True
+use_curriculum: False
