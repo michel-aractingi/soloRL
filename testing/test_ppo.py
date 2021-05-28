@@ -32,14 +32,21 @@ if __name__=='__main__':
     parser.add_argument('--episode-length', type=int, default=None)
     parser.add_argument('--vel-switch', type=int, default=None)
     parser.add_argument('--reactive-update', type=str2bool, default=None)
+    parser.add_argument('--add-external-force', type=str2bool, default=None)
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-    config['mode'] = args.mode
+
+    if 'robot' in config.keys():
+        config['robot']['enable_pyb_GUI'] = args.mode
+    else:
+        config['mode'] = args.mode
+
     if args.episode_length is not None: config['episode_length'] = args.episode_length
     if args.vel_switch is not None: config['vel_switch'] = args.vel_switch
     if args.reactive_update is not None: config['reactive_update'] = args.reactive_update
+    if args.add_external_force is not None: config['add_external_force'] = args.add_external_force
     if args.task is not None:
         config['task'] = args.task
 
@@ -51,6 +58,16 @@ if __name__=='__main__':
         from soloRL.soloGaitEnvContact import SoloGaitEnvContact as env_constructor
     elif args.env_name == 'gaitperiod':
         from soloRL.soloGaitPeriodEnv import SoloGaitPeriodEnv as env_constructor
+    elif args.env_name == 'timing':
+        from soloRL.soloTimingsEnv import SoloTimingsEnv as env_constructor
+    elif args.env_name == 'timing12':
+        from soloRL.soloTimingsEnv12 import SoloTimingsEnv12 as env_constructor
+    elif args.env_name == 'timingoneleg':
+        from soloRL.soloTimingsOneLegEnv import SoloTimingsOneLegEnv as env_constructor
+    elif args.env_name == 'timingoneleg4':
+        from soloRL.soloTimingsOneLegEnv4 import SoloTimingsOneLegEnv4 as env_constructor
+    else:
+        raise NotImplementedError('Error Env {} not found!'.format(args.env_name))
 
     os.chdir(args.checkpoint_dir)
     """
@@ -68,12 +85,14 @@ if __name__=='__main__':
     if 'ob_rms' in ckpt.keys():
         env.envs.ob_rms = ckpt['ob_rms']
 
-    policy = Policy(env.observation_space.shape, env.action_space)
+    policy = Policy(env.observation_space.shape, env.action_space , {'hidden_size':512})
+    print(policy)
     policy.load_state_dict(ckpt['state_dict'])
     policy.eval()
 
     if args.store_action_histogram:
         a_hist = [0 for _ in range(env.action_space.n)]
+        a_list = []
         
     if args.linear_velocity:
         vel = np.zeros((1,6))
@@ -98,6 +117,7 @@ if __name__=='__main__':
 
         if args.store_action_histogram:
             a_hist[int(action.item())] += 1
+            a_list.append(int(action.item()))
 
         if infos['episode_length'] % 20==0:
             vels.append(infos['dr/body_velocity'])
@@ -107,15 +127,17 @@ if __name__=='__main__':
                 vel[0][0] += 0.1
                 env.envs.venv.reset_vel(vel)
 
+        #time.sleep(0.05)
+
         if done:
             for i in reversed(range(1,len(energy))):
                 energy[i] = energy[i] - energy[i-1]
                 vels[i] = vels[i] - vels[i-1]
                 trqs[i] = trqs[i] - trqs[i-1]
-            energy = np.array(energy)/20
-            vels = np.array(vels)/20
-            trqs = np.array(trqs)/20
-            import pudb; pudb.set_trace()
+            #energy = np.array(energy)/20
+            #vels = np.array(vels)/20
+            #trqs = np.array(trqs)/20
+            #import pudb; pudb.set_trace()
             print(episode, infos['episode_length'])
             episode += 1
             obs = env.reset()

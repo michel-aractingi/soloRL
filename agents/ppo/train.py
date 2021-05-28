@@ -38,8 +38,10 @@ def train(args, config, env_constructor, writer=None):
         action_dim = envs.action_space.shape[0]
         storage_dim = action_dim
 
-    actor_critic = Policy(envs.observation_space.shape, envs.action_space)
+    actor_critic = Policy(envs.observation_space.shape, envs.action_space, {'hidden_size':args.hidden_size})
     actor_critic.to(device)
+
+    print(actor_critic)
 
     agent = PPO(
                  actor_critic,
@@ -49,6 +51,7 @@ def train(args, config, env_constructor, writer=None):
                  args.value_loss_coef,
                  args.entropy_coef,
                  lr=args.lr,
+                 l2_coef=args.l2_coef,
                  max_grad_norm=args.max_grad_norm)
 
     ep_buffer = OPBuffer(args.num_steps, args.num_agents,
@@ -60,7 +63,7 @@ def train(args, config, env_constructor, writer=None):
     episode_rewards = deque(maxlen=32)
     episode_length = deque(maxlen=32)
     episode_success = deque(maxlen=32)
-    max_vel = 0.0
+    max_vel = 0.0; min_f = 0.0; max_f = 0.0
     episode_rewards_dict = defaultdict(lambda: deque(maxlen=32))
 
     start = time.time()
@@ -86,6 +89,8 @@ def train(args, config, env_constructor, writer=None):
                     episode_length.append(info['episode_length'])
                     episode_success.append(info['success'])
                     max_vel = max(max_vel, info['max_velocity'])
+                    min_f = max(min_f, info['min_force'])
+                    max_f = max(max_f, info['max_force'])
                     for k in info.keys():
                         if 'dr/' in k.lower():
                             episode_rewards_dict[k].append(info[k])
@@ -140,6 +145,8 @@ def train(args, config, env_constructor, writer=None):
                 utils.log(writer, episode_success, 'Episode/success_mean', total_num_steps)
                 utils.log(writer, episode_length, 'Episode/length', total_num_steps)
                 utils.log(writer, max_vel, 'Curriculum/max_vel', total_num_steps)
+                utils.log(writer, max_f, 'Curriculum/max_force', total_num_steps)
+                utils.log(writer, min_f, 'Curriculum/min_force', total_num_steps)
                 utils.log(writer, episode_rewards_dict, '', total_num_steps)
 
 

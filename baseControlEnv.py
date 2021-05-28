@@ -17,12 +17,15 @@ feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 """
 -------------------------------------------------------------
 """
-Vmax = .7
+Vmax = .8
+MAXFORCE=10
 # External Forces
-magnitudes = [3, 5, 8, 10]
+#magnitudes = [3, 5, 6, 8, 9, 10]
+magnitudes = [8, 9, 10]
+DEFAULTFORCE = [7,10]
 durations = [1000, 2000, 3000, 4000, 5000]
+mask = np.array([[0,0,0,0,0,0]])
 def new_random_vel(max_val=Vmax):
-    mask = np.array([[1,0,0,0,0,1]])
     vel = (np.random.random((6,1)) - 0.5 ) * 2 * max_val
     vel *= mask.T
     return vel
@@ -35,7 +38,7 @@ class BaseControlEnv(gym.core.Env):
         self.mode = config.get('mode', 'headless')
         #self.q_init = config.q_init
         self.q_init = np.array([0.0, 0.7, -1.4, -0.0, 0.7, -1.4, 0.0, -0.7, +1.4, -0.0, -0.7, +1.4])
-
+        
         self.dt_wbc = config.get('dt_wbc', self.dt)
         self.dt_mpc = config.get('dt_mpc', 0.02)
 
@@ -47,6 +50,7 @@ class BaseControlEnv(gym.core.Env):
         self.solo12 = config.get('solo12', True)
         self.episode_length = config.get('episode_length', 100)
         self.use_flat_ground = config.get('flat_ground', True)
+        self.num_history_stack = config.get('num_history_stack', 1)
         self.add_external_force = config.get('add_external_force', False)
 
 
@@ -108,11 +112,20 @@ class BaseControlEnv(gym.core.Env):
         self._info['episode_reward'] = 0
         self._last_action = None
         self.past_commands = deque([np.zeros(3)]*4,maxlen=4)
+        self.state_history = deque([np.zeros(46)]*self.num_history_stack,maxlen=self.num_history_stack)
+
+        if self.add_external_force:
+            if self.use_curriculum:
+                self.min_max_force = np.array([0,2])
+            else:
+                self.min_max_force = DEFAULTFORCE
+        else:
+            self.min_max_force = np.zeros(2)
 
         if config.get('use_logging', False):
             from soloRL.logger import Logger
             self.logger = Logger(self.N_SIMULATION)
-            self.vel_list = np.load('/home/soloRL/misc/vel_plan3.npy')
+            self.vel_list = None#np.load('/home/soloRL/misc/vel_plan4.npy')
             self.vel_itr = 0
         else:
             self.logger = None
@@ -121,7 +134,6 @@ class BaseControlEnv(gym.core.Env):
     def step(self, action):
         assert not self._reset, "env.reset() must be called before step"
         #assert action < self.num_actions
-
         self._last_action = action
 
         self.continuous_time += self.dt
@@ -132,7 +144,7 @@ class BaseControlEnv(gym.core.Env):
 
         done, info = self.get_termination()
         torque_pen = 0; vel_pen = 0; joints_power = np.zeros(12)
-        for _ in range(self.k_rl):
+        for i in range(self.k_rl):
             self._apply_force(self.controller.k) # If noise is added
             self.controller_step()
             self.continuous_time += self.dt
@@ -143,19 +155,19 @@ class BaseControlEnv(gym.core.Env):
             base_vel = self.get_base_vel().flatten()
             vel_pen += np.square(self.vel_ref.flatten() - base_vel).sum()
             joints_power += self.get_joints_power()
-            if self.logger is not None:
-                self.log_stats()
-            if done:
-                break;
+            if done: break
+            self.log_stats()
+            if i % (self.k_rl//self.num_history_stack)==0:
+                self.state_history.append(self.get_internal_state())
 
 
         self.switch_velocities()
-        self.past_commands.append(self.vel_ref[[0,1,-1]])
+        self.past_commands.append(self.vel_ref.flatten()[[0,1,-1]])
 
         state = self.get_observation()
         #reward = 1 - (1./self.k_rl) * (0.01*torque_pen + vel_pen)
         energy_pen = joints_power.sum() * self.dt 
-        reward = 1 - (1./self.k_rl) * (5* energy_pen +  vel_pen)
+        reward = 1 - (1./self.k_rl) * (20* energy_pen +  vel_pen)
         if info['nan'] or np.isnan(np.sum(state)):
             state = np.zeros(self.observation_space.shape)
             reward = 0.0
@@ -196,7 +208,8 @@ class BaseControlEnv(gym.core.Env):
             self.vel_ref = self.controller.joystick.v_ref
 
         self.past_commands = deque([np.zeros(3)]*4,maxlen=4)
-        self.past_commands.append(self.vel_ref[[0,1,-1]])
+        self.past_commands.append(self.vel_ref.flatten()[[0,1,-1]])
+        self.state_history = deque([np.zeros(46)]*self.num_history_stack,maxlen=self.num_history_stack)
         self.create_force_function()
 
         self._reset = False
@@ -211,6 +224,8 @@ class BaseControlEnv(gym.core.Env):
         self._info['dr/body_velocity'] = 0
         self._info['dr/Energy_pen'] = 0
         self._info['max_velocity'] = self.max_velocity
+        self._info['max_force'] = self.min_max_force[1]
+        self._info['min_force'] = self.min_max_force[0]
         self._last_action = None
 
         if self.logger is not None:
@@ -264,12 +279,13 @@ class BaseControlEnv(gym.core.Env):
         else:
             M = np.zeros((3,))
             F = np.zeros((3,))
-            F[random.choices([0,1,2])] = random.choices(magnitudes)
+            F[random.choices([0,1,2])] = np.random.randint(self.min_max_force[0], 
+                                                           self.min_max_force[1] + 1)
             sign = random.choices([-1,1])[0]
             F *= np.array([sign, sign, 1.])
             start_itr = random.randint(500, int(self.k_rl * self.episode_length *(2/3)))
             duration = random.choice(durations)
-            print('apply force with magniture {} starting at iteration {} for a duration of {} steps'.format(F,start_itr, duration))
+            #print('apply force with magniture {} starting at iteration {} for a duration of {} steps'.format(F,start_itr, duration))
             self._apply_force = lambda k: self.robot.pyb_sim.apply_external_force(k, start_itr, duration, F, M)
 
     def log_stats(self):
@@ -306,6 +322,11 @@ class BaseControlEnv(gym.core.Env):
             return
         self.max_velocity = np.clip(self.max_velocity + val, 0.0, Vmax)
 
+        #Increment min and max force
+        self.min_max_force  = np.clip(self.min_max_force + 1, 
+                                      np.array([0,0]), 
+                                      np.array([MAXFORCE-2, MAXFORCE]))
+
     def reset_hard(self):
         del self.controller, self.robot
         self.controller = \
@@ -334,6 +355,16 @@ class BaseControlEnv(gym.core.Env):
                         use_flat_plane=self.use_flat_ground,
                         enable_pyb_GUI=self.mode=='gui',
                         dt=self.dt_wbc)
+
+    def get_internal_state(self):
+        qu = np.array([self.robot.baseState[0],
+            p.getEulerFromQuaternion(self.robot.baseOrientation)]).flatten()[2:]
+        qu_dot = np.array(self.get_base_vel()).flatten()
+        qa = self.robot.q_mes
+        qa_dot = self.robot.v_mes
+        pfeet = self.get_feet_positions().flatten()
+
+        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet])
 
     def get_observation(self):
         #Basic Observation

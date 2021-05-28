@@ -10,7 +10,7 @@ def get_ppo_args():
     parser = argparse.ArgumentParser('PPO args')
     parser.add_argument('--num-agents', type=int, default=32)
     parser.add_argument('--output-size', type=int, default=64)
-    parser.add_argument('--hidden-size', type=int, default=32)
+    parser.add_argument('--hidden-size', type=int, default=64)
     parser.add_argument('--no-cuda', action='store_true', default=False)
 
     parser.add_argument('--env-name', type=str, default='base')
@@ -22,6 +22,7 @@ def get_ppo_args():
     parser.add_argument('--mini-batch-size', type=int, default=32)
     #parser.add_argument('--learning-rate', '-lr', type=float, default=1e-3)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--l2-coef', type=float, default=0.0)
     parser.add_argument('--value-loss-coef', type=float, default=0.5)
     parser.add_argument('--entropy-coef', type=float, default=0.01)
     parser.add_argument('--max-grad-norm', type=float, default=0.5)
@@ -51,6 +52,7 @@ if __name__=='__main__':
     args = get_ppo_args()
     args.cuda = torch.cuda.is_available() and not args.no_cuda
     config = parse_config(args.config_file)
+    print(config)
     #if args.env_name in ('gait', 'contact'):
         #config['task'] = ''
     #elif args.task is not None:
@@ -80,6 +82,14 @@ if __name__=='__main__':
         from soloRL.soloGaitMBEnv import SoloGaitMBEnv as env_constructor
     elif args.env_name == 'gaitperiod':
         from soloRL.soloGaitPeriodEnv import SoloGaitPeriodEnv as env_constructor
+    elif args.env_name == 'timing':
+        from soloRL.soloTimingsEnv import SoloTimingsEnv as env_constructor
+    elif args.env_name == 'timing12':
+        from soloRL.soloTimingsEnv12 import SoloTimingsEnv12 as env_constructor
+    elif args.env_name == 'timingoneleg':
+        from soloRL.soloTimingsOneLegEnv import SoloTimingsOneLegEnv as env_constructor
+    elif args.env_name == 'timingoneleg4':
+        from soloRL.soloTimingsOneLegEnv4 import SoloTimingsOneLegEnv4 as env_constructor
     else:
         raise NotImplementedError('Error Env {} not found!'.format(args.env_name))
 

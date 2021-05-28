@@ -4,6 +4,9 @@ from soloGaitEnvContact import SoloGaitEnvContact
 from soloGaitEnv import SoloGaitEnv
 from soloGaitMBEnv import SoloGaitMBEnv
 from soloGaitPeriodEnv import SoloGaitPeriodEnv
+from soloTimingsEnv import SoloTimingsEnv
+from soloTimingsOneLegEnv4 import SoloTimingsOneLegEnv4
+from soloTimingsOneLegEnv import SoloTimingsOneLegEnv
 import argparse
 
 if __name__ == '__main__':
@@ -19,11 +22,17 @@ if __name__ == '__main__':
         import yaml
         with open(args.config_file, 'r') as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
-            config['mode'] = args.mode
     else:
         config = vars(args)
 
-    env = SoloGaitPeriodEnv(config)
+    if 'robot' in config.keys():
+        config['robot']['enable_pyb_GUI'] = args.mode
+    else:
+        config['mode'] = args.mode
+
+
+    env = SoloTimingsEnv(config)
+    #env.reset()
     import pudb; pudb.set_trace()
 
 

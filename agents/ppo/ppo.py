@@ -13,6 +13,7 @@ class PPO():
                  value_loss_coef,
                  entropy_coef,
                  lr=None,
+                 l2_coef=0.0,
                  max_grad_norm=None,
                  use_clipped_value_loss=True):
 
@@ -28,7 +29,7 @@ class PPO():
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
 
-        self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr)
+        self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, weight_decay=l2_coef)
 
     def update(self, storage):
         advantages = storage.returns[:-1] - storage.value_preds[:-1]

@@ -10,6 +10,8 @@ from torch.utils.tensorboard import SummaryWriter
 def get_td3_args():
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--env-name', type=str, default='base')
+
     parser.add_argument("--seed", default=0, type=int)              
     parser.add_argument("--start-timesteps", default=25e3, type=int)
     parser.add_argument("--eval-freq", default=5e3, type=int)       
@@ -52,12 +54,36 @@ if __name__=='__main__':
     args.num_steps = args.episode_length
     if args.timestamp is None:
         args.timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    else:
+        args.timestamp = datetime.now().strftime('%Y%m%d-') + args.timestamp
     
     if args.logdir is not None:
-        args.logdir = os.path.join(args.logdir, config['task'], args.timestamp)
+        task = args.task + '_' if args.task is not None else ''
+        args.logdir = os.path.join(args.logdir, 'Solo_td3_' + args.env_name.capitalize() + '_' + task + args.timestamp)
         writer = SummaryWriter(args.logdir)
     else: 
         writer = None
 
-    td3.train(args, config, SoloBaseEnv, writer)
+    if args.env_name == 'base':
+        from soloRL.baseEnv import SoloBaseEnv as env_constructor
+    elif args.env_name == 'gait':
+        from soloRL.soloGaitEnv import SoloGaitEnv as env_constructor
+    elif args.env_name == 'contact':
+        from soloRL.soloGaitEnvContact import SoloGaitEnvContact as env_constructor
+    elif args.env_name == 'mbgait':
+        from soloRL.soloGaitMBEnv import SoloGaitMBEnv as env_constructor
+    elif args.env_name == 'gaitperiod':
+        from soloRL.soloGaitPeriodEnv import SoloGaitPeriodEnv as env_constructor
+    elif args.env_name == 'timing':
+        from soloRL.soloTimingsEnv import SoloTimingsEnv as env_constructor
+    elif args.env_name == 'timing12':
+        from soloRL.soloTimingsEnv12 import SoloTimingsEnv12 as env_constructor
+    elif args.env_name == 'timingoneleg':
+        from soloRL.soloTimingsOneLegEnv import SoloTimingsOneLegEnv as env_constructor
+    elif args.env_name == 'timingoneleg4':
+        from soloRL.soloTimingsOneLegEnv4 import SoloTimingsOneLegEnv4 as env_constructor
+    else:
+        raise NotImplementedError('Error Env {} not found!'.format(args.env_name))
+
+    td3.train(args, config, env_constructor, writer)
 

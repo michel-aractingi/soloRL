@@ -3,7 +3,7 @@ import gym
 import random
 import numpy as np
 import pybullet as p
-from baseControlEnv import BaseControlEnv
+from baseControlEnv1 import BaseControlEnv 
 from collections import deque
 
 periods7 =  [0.16, 0.24, 0.32, 0.4, 0.48, 0.56, 0.64]
@@ -22,9 +22,11 @@ class SoloGaitPeriodEnv(BaseControlEnv):
         self.semi_mdp = config.get('semi_mdp', False)
         self.reactive_update = config.get('reactive_update', False)
 
+        self.num_history_stack = 8
+
         # 1 base pose z, 3 orn , 6 body vel, 12 Joint angles , 12 Joints Vel,  
         # 12 rel foot pose, 6 vel_ref, 4 past gait seq = 62
-        high = np.inf * np.ones([62])       
+        high = np.inf * np.ones([62 + self.num_history_stack * 46])       
         self.observation_space = gym.spaces.Box(-high, high)
 
         self.next_period = self.T_gait
@@ -65,14 +67,7 @@ class SoloGaitPeriodEnv(BaseControlEnv):
     def get_observation(self):
 
         self.robot.UpdateMeasurment()
-        qu = np.array([self.robot.baseState[0],
-            p.getEulerFromQuaternion(self.robot.baseOrientation)]).flatten()[2:]
-
-        qu_dot = np.array(self.get_base_vel()).flatten()
-        qa = self.robot.q_mes
-        qa_dot = self.robot.v_mes
-
-        pfeet = self.get_feet_positions().flatten()
+        internal_state = self.get_internal_state()
     
         history_periods = np.array(self.past_actions) 
 
@@ -80,7 +75,9 @@ class SoloGaitPeriodEnv(BaseControlEnv):
         
         command_history = np.stack(self.past_commands).flatten()
 
-        return np.concatenate([qu, qu_dot, qa, qa_dot, pfeet, history_periods, command_history])
+        state_history = np.stack(self.state_history).flatten()
+
+        return np.concatenate([internal_state, history_periods, command_history, state_history])
 
     def _update_gait_matrices(self):
         period = self.next_period
