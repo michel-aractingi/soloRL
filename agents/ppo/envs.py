@@ -23,7 +23,7 @@ def make_vec_envs(config, num_envs, env_constructor, gamma=0.99, device=torch.de
 
 
     from soloRL.agents.running_mean_std import VecNormalize
-    envs = VecNormalize(envs, clipob=100, cliprew=100, gamma=gamma)
+    envs = VecNormalize(envs, ob=False, ret=False, clipob=100, cliprew=100, gamma=gamma)
     if not training:
         envs.eval() 
 
@@ -42,6 +42,8 @@ def simple_worker(remote, env):
                 remote.send(env.reset())
             elif cmd == 'get_observation':
                 remote.send(env.get_observation())
+            elif cmd == 'get_torques':
+                remote.send(env.robot.tau_ff)
             elif cmd == 'get_spaces':
                 remote.send((env.observation_space, env.action_space))
             elif cmd == 'close':
@@ -100,6 +102,11 @@ class VecEnvWrapper(Env):
     def get_observation(self):
         for remote in self.remotes:
             remote.send(('get_observation', None))
+        return np.stack([remote.recv() for remote in self.remotes])
+    
+    def get_torques(self):
+        for remote in self.remotes:
+            remote.send(('get_torques', None))
         return np.stack([remote.recv() for remote in self.remotes])
 
     def get_spaces(self):
@@ -198,6 +205,10 @@ class PyTorchEnvWrapper(Env):
     def get_observation(self):
         ob = self.envs.get_observation()
         return torch.from_numpy(ob).to(self.device).float()
+
+    def get_torques(self):
+        tau = self.envs.get_torques()
+        return torch.from_numpy(tau).to(self.device).float()
 
     def increment_curriculum(self):
         self.envs.increment_curriculum()

@@ -36,6 +36,7 @@ def get_ppo_args():
 
     parser.add_argument('--log-interval', type=int, default=10)
     parser.add_argument('--logdir', type=str, default=None)
+    parser.add_argument('--base-checkpoint', type=str, default=None)
     parser.add_argument('--timestamp', type=str, default=None)
     parser.add_argument('--save-interval', type=int, default=20)
 
@@ -86,6 +87,10 @@ if __name__=='__main__':
         from soloRL.soloTimingsEnv import SoloTimingsEnv as env_constructor
     elif args.env_name == 'timing12':
         from soloRL.soloTimingsEnv12 import SoloTimingsEnv12 as env_constructor
+    elif args.env_name == 'timingdelta12':
+        from soloRL.soloTimingsDeltaEnv12 import SoloTimingsDeltaEnv12 as env_constructor
+    elif args.env_name == 'timingdeltamd':
+        from soloRL.soloTimingsDeltaEnvMD import SoloTimingsDeltaEnvMD as env_constructor
     elif args.env_name == 'timingoneleg':
         from soloRL.soloTimingsOneLegEnv import SoloTimingsOneLegEnv as env_constructor
     elif args.env_name == 'timingoneleg4':

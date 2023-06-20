@@ -53,9 +53,9 @@ $ python ./testing/test_td3.py --checkpoint-dir $LOGDIR --mode gui --config-file
 PPO agents:
 | stand | walk | pointGoal |
 |-------|------|-----------|
-|<img src="misc/gifs/stand_ppo.gif" height="250" width="800"> | <img src="misc/gifs/walk_ppo.gif" height="250" width="800"> | <img src="misc/gifs/pg_ppo.gif" height="250" width="800">|
+|<img src="misc/gifs/stand_ppo.gif" height="250" width="400"> | <img src="misc/gifs/walk_ppo.gif" height="250" width="400"> | <img src="misc/gifs/pg_ppo.gif" height="250" width="400">|
 
 TD3 agents:
 | stand | walk | pointGoal |
 |-------|------|-----------|
-| <img src="misc/gifs/stand_td3.gif" height="250" width="800">| <img src="misc/gifs/walk_td3.gif" height="250" width="800">| <img src="misc/gifs/pg_td3.gif" height="250" width="800">|
+| <img src="misc/gifs/stand_td3.gif" height="250" width="400">| <img src="misc/gifs/walk_td3.gif" height="250" width="400">| <img src="misc/gifs/pg_td3.gif" height="250" width="400">|

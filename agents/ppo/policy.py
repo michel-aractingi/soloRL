@@ -8,7 +8,7 @@ from torch.distributions import Normal, Categorical, Bernoulli
 from soloRL.agents.utils import init_layer
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, base_kwargs={}):
+    def __init__(self, obs_shape, action_space, base=None, base_kwargs={}):
         super(Policy, self).__init__()
 
         if len(obs_shape) == 1:
@@ -16,12 +16,17 @@ class Policy(nn.Module):
         elif len(obs_shape) == 2:
             self.base = TransformerBase(obs_shape, **base_kwargs)
 
+        if base is not None:
+            self.base.load_state_dict(base)
+
         if action_space.__class__.__name__ == 'Discrete':
             self.pi_dist = CategoricalHead(self.base.output_size, action_space.n)
         elif action_space.__class__.__name__ == 'Box':
             self.pi_dist = DiagGaussian(self.base.output_size, action_space.shape[0])
         elif action_space.__class__.__name__ == 'MultiBinary':
             self.pi_dist = BernoulliHead(self.base.output_size, action_space.n)
+        elif action_space.__class__.__name__ == 'MultiDiscrete':
+            self.pi_dist = MultiCategoricalHead(self.base.output_size, action_space.nvec)
         else:
             raise NotImplementedError
 
@@ -143,13 +148,15 @@ class DiagGaussian(nn.Module):
 
         return ModNormal(action_mean, action_logstd.exp())
 
-class CategoricalHead(nn.Module):
-    def __init__(self, num_inputs, num_outputs):
-        super(CategoricalHead, self).__init__()
-        self.linear = init_layer(nn.Linear(num_inputs, num_outputs))
+class MultiCategoricalHead(nn.Module):
+    def __init__(self, num_inputs, nvec):
+        super(MultiCategoricalHead, self).__init__()
+        from soloRL.agents.multi_categorical_distribution import MultiCategoricalDistribution
+        self.base_dist = MultiCategoricalDistribution(nvec)        
+        self.linear = nn.Linear(num_inputs, sum(nvec))
 
     def forward(self, x):
-        return ModCategorical(logits=self.linear(x))
+        return self.base_dist.proba_distribution(self.linear(x))
 
 class BernoulliHead(nn.Module):
     def __init__(self, num_inputs, num_outputs):

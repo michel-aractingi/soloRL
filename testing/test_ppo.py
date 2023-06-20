@@ -62,6 +62,10 @@ if __name__=='__main__':
         from soloRL.soloTimingsEnv import SoloTimingsEnv as env_constructor
     elif args.env_name == 'timing12':
         from soloRL.soloTimingsEnv12 import SoloTimingsEnv12 as env_constructor
+    elif args.env_name == 'timingdelta12':
+        from soloRL.soloTimingsDeltaEnv12 import SoloTimingsDeltaEnv12 as env_constructor
+    elif args.env_name == 'timingdeltamd':
+        from soloRL.soloTimingsDeltaEnvMD import SoloTimingsDeltaEnvMD as env_constructor
     elif args.env_name == 'timingoneleg':
         from soloRL.soloTimingsOneLegEnv import SoloTimingsOneLegEnv as env_constructor
     elif args.env_name == 'timingoneleg4':
@@ -85,7 +89,7 @@ if __name__=='__main__':
     if 'ob_rms' in ckpt.keys():
         env.envs.ob_rms = ckpt['ob_rms']
 
-    policy = Policy(env.observation_space.shape, env.action_space , {'hidden_size':512})
+    policy = Policy(env.observation_space.shape, env.action_space ,None, {'hidden_size':512})
     print(policy)
     policy.load_state_dict(ckpt['state_dict'])
     policy.eval()
@@ -110,7 +114,7 @@ if __name__=='__main__':
 
     while episode < args.num_runs:
         with torch.no_grad():
-            _, action, _ = policy.act(obs, deterministic=True)
+            _, action, _ = policy.act(obs, deterministic=False)
 
         #action[0][0] = 0
         obs, reward, done, infos = env.step(action)

@@ -203,7 +203,13 @@ class SoloTimingsEnv:
                 tc = tnc + d if d != 0 else tnc + 1
                 self._contacts[int(l/2)] = get_oscillator_function(tnc, tc)
             
-        self.set_new_gait()
+        # construct gait and check for errors cases (TODO hacky)
+        gait = np.vstack([c[:self.N_gait] for c in self._contacts]).T
+        if np.sum(gait) == 0.0:
+            self._reset = True
+            return None, -1, True, self._info
+
+        self.set_new_gait(gait)
 
         torque_pen = vel_pen = joints_power = 0.0;
         for i in range(self.k_mpc):
@@ -269,8 +275,7 @@ class SoloTimingsEnv:
         # Step simulation for one dt
         self.robot.SendCommand(WaitEndOfCycle=False)
 
-    def set_new_gait(self):
-        gait = np.vstack([c[:self.N_gait] for c in self._contacts]).T
+    def set_new_gait(self, gait):
         self.controller.gait.setGait(gait)
         self.advance_contacts()
 

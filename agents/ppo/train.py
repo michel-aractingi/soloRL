@@ -37,8 +37,12 @@ def train(args, config, env_constructor, writer=None):
     else:
         action_dim = envs.action_space.shape[0]
         storage_dim = action_dim
+    #elif envs.action_space.__class__.__name__ == 'MultiDiscrete':
+    #    action_dim = sum(envs.action_space.nvec)
+    #    storage_dim = action_dim
 
-    actor_critic = Policy(envs.observation_space.shape, envs.action_space, {'hidden_size':args.hidden_size})
+    base = torch.load(args.base_checkpoint) if args.base_checkpoint is not None else None
+    actor_critic = Policy(envs.observation_space.shape, envs.action_space, base, {'hidden_size':args.hidden_size})
     actor_critic.to(device)
 
     print(actor_critic)

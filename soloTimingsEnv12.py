@@ -19,14 +19,15 @@ feet_frames_name = ['FL_FOOT', 'FR_FOOT', 'HL_FOOT', 'HR_FOOT']
 -------------------------------------------------------------
 """
 MAXFORCE=10
-mask = np.array([[0,0,0,0,0,0]])
-Vmax = 0.7
+mask = np.array([[1,0,0,0,0,0]])
+Vmax = 0.3
 def new_random_vel(max_val=Vmax):
-    vel = (np.random.random((6,1)) - 0.5 ) * 2 * max_val
+    #vel = (np.random.random((6,1)) - 0.5 ) * 2 * max_val
+    vel = np.random.random((6,1)) * max_val
     vel *= mask.T
     return vel
 
-max_timing = 0.52
+max_timing = 0.26
 
 def get_oscillator_function(tnc, tc, freq):
     assert freq >= tc and tc > tnc
@@ -48,7 +49,6 @@ class SoloTimingsEnv12:
         self.num_history_stack = config.get('num_history_stack', 1)
         self.add_external_force = config.get('add_external_force', False)
         self.use_flat_ground = config.get('use_flat_plane', True)
-        self.max_velocity = 0.0
         self.q_init = np.array([0.0, 0.7, -1.4, -0.0, 0.7, -1.4, 0.0, -0.7, +1.4, -0.0, -0.7, +1.4])
 
         self.controller = \
@@ -104,11 +104,12 @@ class SoloTimingsEnv12:
         self.dt = config.get('dt', 0.002)
 
         self.episode_length = config.get('episode_length', 1000)
-        self.auto_vel_switch = config.get('auto_vel_switch', True) 
-        self.vel_switch = config.get('vel_switch', 30)#* self.k_rl
+        self.auto_vel_switch = config.get('auto_vel_switch', True)
+        self.vel_switch = config.get('vel_switch', 1000)#* self.k_rl
         self.use_curriculum = config.get('use_curriculum', False)
         self.max_velocity = 0.0 if self.use_curriculum else Vmax
 
+        self._hard_reset = False
         self._reset = True
         self.timestep = 0
         self._info = {}
@@ -136,6 +137,10 @@ class SoloTimingsEnv12:
             self.vel_list = None
 
     def reset(self):
+        if self._hard_reset:
+            self.reset_hard()
+            self._hard_reset = False
+
         self.controller.reset()
         self.robot.reset()
 
@@ -143,15 +148,15 @@ class SoloTimingsEnv12:
                                     maxlen=self.num_history_stack)
         self.observation_history = deque([np.zeros((self._obs_size,))]*self.num_history_stack,                                         maxlen=self.num_history_stack)
 
-        if self.auto_vel_switch: 
-            if self.vel_list is not None:
-                vel = self.vel_list[0]
-                self.vel_itr = 1
-            else:
-                vel = new_random_vel(self.max_velocity)
-            self.reset_vel_ref(vel)
-        else:
-            self.vel_ref = self.controller.joystick.v_ref
+        vel = new_random_vel(self.max_velocity)
+        self.reset_vel_ref(vel)
+        #if self.auto_vel_switch: 
+        #    if self.vel_list is not None:
+        #        vel = self.vel_list[0]
+        #        self.vel_itr = 1
+        #    else:
+        #else:
+        #    self.vel_ref = self.controller.joystick.v_ref
 
         if self.logger is not None:
             self.logger.reset()
@@ -195,10 +200,17 @@ class SoloTimingsEnv12:
             if not np.array_equal(contact_config[l:l+3], self._last_action[l:l+3]):
                 tnc, d, f = contact_config[l:l+3].flatten()
                 tc = tnc + d if d!=0 else tnc + 1
-                freq= tc + f
+                if tnc == f == 0: f = 1
+                freq= np.int(np.clip(tc + f, 4, 2*max_timing/self.dt_mpc))
                 self._contacts[int(l/3)] = get_oscillator_function(tnc, tc, freq)
             
-        self.set_new_gait()
+        # construct gait and check for errors cases (TODO hacky)
+        gait = np.vstack([c[:self.N_gait] for c in self._contacts]).T
+        if np.sum(gait) == 0.0:
+            self._reset = True
+            return None, -1, True, self._info
+
+        self.set_new_gait(gait)
 
         torque_pen = vel_pen = joints_power = 0.0;
         for i in range(self.k_mpc):
@@ -222,12 +234,20 @@ class SoloTimingsEnv12:
 
         # Compute reward
         energy_pen = joints_power.sum() * self.dt 
-        reward = 1 - (10* energy_pen +  vel_pen)/self.k_mpc
+        reward = 1. - (10* energy_pen +  vel_pen)/self.k_mpc
 
         if self.auto_vel_switch and self.vel_switch % self.timestep == 0:
             self.switch_velocities()
 
         done, info = self.get_termination()
+
+        observation = self.get_observation()
+        if info['nan'] or np.isnan(np.sum(observation)) or np.isnan(reward):
+            #print('obs: ',self.get_observation(), 'rew :', reward, 'inf: ', self._info.copy())
+            #print('act :', action)
+            observation = None
+            reward = -10
+            done = True
 
         self._info['episode_length'] += 1
         self._info['episode_reward'] += reward
@@ -242,8 +262,7 @@ class SoloTimingsEnv12:
         #obs_action_dict = {'obs':self.get_observation(), 'action':self.get_action_history()}
 
         self._reset = done 
-
-        return self.get_observation(), reward, done, self._info.copy()
+        return observation, reward, done, self._info.copy()
 
     def controller_step(self):
 
@@ -261,8 +280,7 @@ class SoloTimingsEnv12:
         # Step simulation for one dt
         self.robot.SendCommand(WaitEndOfCycle=False)
 
-    def set_new_gait(self):
-        gait = np.vstack([c[:self.N_gait] for c in self._contacts]).T
+    def set_new_gait(self, gait):
         self.controller.gait.setGait(gait)
         self.advance_contacts()
 
@@ -291,10 +309,11 @@ class SoloTimingsEnv12:
 
         if not self.flat_observation:
             observation = np.concatenate((observation, np.zeros((3,)))) 
-
+            
         self.observation_history.append(observation)
 
     def reset_vel_ref(self, vel):
+        #vel[0,0]=0.3
         self.vel_ref = vel
         self.controller.v_ref = vel.reshape(-1,1)
 
@@ -369,6 +388,13 @@ class SoloTimingsEnv12:
 
     def get_termination(self):
         info = {'timeout':False, 'nan': False}
+
+        if self.controller.error_flag == 4:
+            print('nan detected')
+            info['nan'] = True
+            self._hard_reset = True
+            return True, info
+
         # if fallen
         if self.robot.baseState[0][-1] < 0.11 or self.controller.myController.error:
             return True, info
@@ -423,7 +449,7 @@ class SoloTimingsEnv12:
         else:
             return
 
-    def increment_curriculum(self, val=0.1):
+    def increment_curriculum(self, val=0.05):
         if not self.use_curriculum:
             return
         self.max_velocity = np.clip(self.max_velocity + val, 0.0, Vmax)
@@ -436,3 +462,32 @@ class SoloTimingsEnv12:
 
     def get_current_gait(self):
         return self.controller.gait.getCurrentGait()
+
+
+    def reset_hard(self):
+        self.controller = \
+            Controller(q_init=self.q_init, 
+                       envID=0,
+                       velID=1,
+                       dt_wbc=self.config['dt_wbc'],
+                       dt_mpc=self.config['dt_mpc'], 
+                       k_mpc=int(self.config['dt_mpc'] / self.config['dt_wbc']),
+                       t=0,
+                       T_gait=self.config['T_gait'],
+                       T_mpc=self.config['T_mpc'],
+                       N_SIMULATION=self.config['N_SIMULATION'],
+                       type_MPC=self.config['type_MPC'],
+                       use_flat_plane= self.use_flat_ground,
+                       predefined_vel=True,
+                       kf_enabled=self.config['kf_enabled'],
+                       N_gait=self.config['N_gait'],
+                       enable_pyb_GUI=self.mode=='gui',
+                       isSimulation=True)
+
+        self.robot = PyBulletSimulator()
+        self.robot.Init(calibrateEncoders=True, 
+                        q_init=self.q_init,
+                        envID=0,
+                        use_flat_plane=self.use_flat_ground,
+                        enable_pyb_GUI=self.mode=='gui',
+                        dt=self.config['dt_wbc'])

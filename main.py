@@ -5,8 +5,11 @@ from soloGaitEnv import SoloGaitEnv
 from soloGaitMBEnv import SoloGaitMBEnv
 from soloGaitPeriodEnv import SoloGaitPeriodEnv
 from soloTimingsEnv import SoloTimingsEnv
+from soloTimingsEnv12 import SoloTimingsEnv12
+from soloTimingsDeltaEnv12 import SoloTimingsDeltaEnv12
 from soloTimingsOneLegEnv4 import SoloTimingsOneLegEnv4
 from soloTimingsOneLegEnv import SoloTimingsOneLegEnv
+from soloRL.soloTimingsDeltaEnvMD import SoloTimingsDeltaEnvMD 
 import argparse
 
 if __name__ == '__main__':
@@ -26,12 +29,14 @@ if __name__ == '__main__':
         config = vars(args)
 
     if 'robot' in config.keys():
-        config['robot']['enable_pyb_GUI'] = args.mode
+        config['robot']['enable_pyb_GUI'] = True if args.mode =='gui' else False
     else:
         config['mode'] = args.mode
 
+    if args.episode_length is not None: config['episode_length']=args.episode_length
 
-    env = SoloTimingsEnv(config)
+
+    env = SoloTimingsDeltaEnvMD(config)
     #env.reset()
     import pudb; pudb.set_trace()
 

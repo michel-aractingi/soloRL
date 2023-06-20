@@ -8,7 +8,7 @@ try:
    matplotlib.rc('font', **font)
    import matplotlib.pyplot as plt 
    import seaborn as sns 
-   sns.set(style="darkgrid")
+   sns.set(style="whitegrid")
 except:
     pass
 
@@ -41,7 +41,7 @@ class Logger:
 
         self.power_joints[k] = joints_power
 
-        self.actions[k] = action
+        #self.actions[k] = action
 
         self.top += 1
 
@@ -74,7 +74,7 @@ class Logger:
         if self._axs[3] == []:
             plt.figure(4)
             self._axs[3] = [plt.subplot(1,1,1)]
-        self.plot_actions(self._axs[3], label)
+        #self.plot_actions(self._axs[3], label)
         return
 
     def plot_vels(self, axs, label=None):
